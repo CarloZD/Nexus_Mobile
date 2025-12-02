@@ -1,4 +1,4 @@
-package com.tecsup.nexus_mobile.domain.model
+package com.tecsup.nexusmobile.domain.model
 
 data class CartItem(
     val gameId: String = "",
