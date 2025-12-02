@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "464202151840",
+    "project_id": "nexusmobile-87749",
+    "storage_bucket": "nexusmobile-87749.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:464202151840:android:24a849cd875ff2edbe16c5",
+        "android_client_info": {
+          "package_name": "com.tecsup.nexus_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCn5yvNIAprZ3wjymS_4KReflyw2PKCnIw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
