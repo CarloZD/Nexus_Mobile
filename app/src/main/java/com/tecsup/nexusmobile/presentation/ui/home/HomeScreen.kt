@@ -27,6 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.tecsup.nexusmobile.R
 import com.tecsup.nexusmobile.domain.model.Game
+import com.tecsup.nexusmobile.presentation.ui.catalog.GameCard
 import com.tecsup.nexusmobile.presentation.viewmodel.CatalogViewModel
 import com.tecsup.nexusmobile.presentation.viewmodel.CatalogUiState
 
@@ -296,89 +297,6 @@ fun CategoryChips() {
     }
 }
 
-@Composable
-fun GameCard(
-    game: Game,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .width(160.dp)
-            .height(240.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column {
-            // Imagen
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp)
-            ) {
-                AsyncImage(
-                    model = game.headerImage ?: game.backgroundImage,
-                    contentDescription = game.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-
-                // Badge de descuento
-                if (!game.isFree && game.price > 0) {
-                    Surface(
-                        color = Color(0xFF00FF00),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                    ) {
-                        Text(
-                            text = "-${((game.price * 0.2).toInt())}%",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
-                    }
-                }
-            }
-
-            // Información
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp)
-            ) {
-                Text(
-                    text = game.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = game.category,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (game.isFree) "GRATIS" else "S/${game.price}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (game.isFree) Color(0xFF00FF00)
-                        else MaterialTheme.colorScheme.secondary
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun NewsSection() {

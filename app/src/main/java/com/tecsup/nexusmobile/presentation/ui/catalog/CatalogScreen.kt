@@ -7,16 +7,15 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tecsup.nexusmobile.R
+import com.tecsup.nexusmobile.domain.model.Game
 import com.tecsup.nexusmobile.presentation.viewmodel.CatalogUiState
 import com.tecsup.nexusmobile.presentation.viewmodel.CatalogViewModel
 
@@ -24,9 +23,49 @@ import com.tecsup.nexusmobile.presentation.viewmodel.CatalogViewModel
 @Composable
 fun CatalogScreen(
     viewModel: CatalogViewModel,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onGameClick: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showFilterSheet by remember { mutableStateOf(false) }
+    var filterState by remember { mutableStateOf(FilterState()) }
+
+    // Obtener categorías y plataformas únicas de los juegos
+    val availableCategories = remember(uiState) {
+        val currentState = uiState
+        when (currentState) {
+            is CatalogUiState.Success -> {
+                currentState.games.mapNotNull { it.category }.distinct()
+            }
+            else -> emptyList()
+        }
+    }
+
+    val availablePlatforms = remember(uiState) {
+        val currentState = uiState
+        when (currentState) {
+            is CatalogUiState.Success -> {
+                currentState.games.mapNotNull { it.platform }.distinct()
+            }
+            else -> emptyList()
+        }
+    }
+
+    // Filtrar juegos según el estado del filtro
+    val filteredGames = remember(uiState, filterState) {
+        val currentState = uiState
+        when (currentState) {
+            is CatalogUiState.Success -> {
+                currentState.games.filter { game ->
+                    (filterState.selectedCategory == null || game.category == filterState.selectedCategory) &&
+                    (filterState.selectedPlatform == null || game.platform == filterState.selectedPlatform) &&
+                    (!filterState.onlyFree || game.isFree) &&
+                    (!filterState.onlyFeatured || game.featured)
+                }
+            }
+            else -> emptyList()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -42,10 +81,16 @@ fun CatalogScreen(
                             modifier = Modifier.size(40.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Nexus")
+                        Text("Catálogo")
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showFilterSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Filtros"
+                        )
+                    }
                     IconButton(onClick = onLogout) {
                         Icon(
                             imageVector = Icons.Default.ExitToApp,
@@ -69,47 +114,46 @@ fun CatalogScreen(
             }
 
             is CatalogUiState.Success -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                ) {
-                    items(state.games) { game ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
+                if (filteredGames.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = game.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-
-                                Column {
-                                    Text(
-                                        text = game.category,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = if (game.isFree) "Gratis" else "$${game.price}",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
+                            Text(
+                                text = "No se encontraron juegos",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "Intenta ajustar los filtros",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(onClick = { filterState = FilterState() }) {
+                                Text("Limpiar filtros")
                             }
+                        }
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                    ) {
+                        items(filteredGames) { game ->
+                            GameCard(
+                                game = game,
+                                onClick = { onGameClick(game.id) }
+                            )
                         }
                     }
                 }
@@ -123,13 +167,13 @@ fun CatalogScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
                             text = state.message,
                             color = MaterialTheme.colorScheme.error
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = { viewModel.loadGames() }) {
                             Text("Reintentar")
                         }
@@ -138,4 +182,14 @@ fun CatalogScreen(
             }
         }
     }
+
+    // Sheet de filtros
+    GameFilterSheet(
+        isVisible = showFilterSheet,
+        onDismiss = { showFilterSheet = false },
+        filterState = filterState,
+        onFilterChange = { filterState = it },
+        availableCategories = availableCategories,
+        availablePlatforms = availablePlatforms
+    )
 }
