@@ -3,6 +3,7 @@ package com.tecsup.nexusmobile.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tecsup.nexusmobile.data.repository.GameRepositoryImpl
+import com.tecsup.nexusmobile.data.repository.LibraryRepositoryImpl
 import com.tecsup.nexusmobile.domain.model.Game
 import com.tecsup.nexusmobile.domain.repository.GameRepository
 import com.tecsup.nexusmobile.domain.usecase.GetGameByIdUseCase
@@ -12,12 +13,13 @@ import kotlinx.coroutines.launch
 
 sealed class GameDetailUiState {
     object Loading : GameDetailUiState()
-    data class Success(val game: Game) : GameDetailUiState()
+    data class Success(val game: Game, val isInLibrary: Boolean = false) : GameDetailUiState()
     data class Error(val message: String) : GameDetailUiState()
 }
 
 class GameDetailViewModel(
-    private val getGameByIdUseCase: GetGameByIdUseCase = GetGameByIdUseCase(GameRepositoryImpl())
+    private val getGameByIdUseCase: GetGameByIdUseCase = GetGameByIdUseCase(GameRepositoryImpl()),
+    private val libraryRepository: LibraryRepositoryImpl = LibraryRepositoryImpl()
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<GameDetailUiState>(GameDetailUiState.Loading)
     val uiState: StateFlow<GameDetailUiState> = _uiState
@@ -28,7 +30,10 @@ class GameDetailViewModel(
             getGameByIdUseCase(gameId)
                 .onSuccess { game ->
                     if (game != null) {
-                        _uiState.value = GameDetailUiState.Success(game)
+                        // Verificar si el juego está en la biblioteca
+                        val isInLibrary = libraryRepository.isGameInLibrary(gameId)
+                            .getOrElse { false }
+                        _uiState.value = GameDetailUiState.Success(game, isInLibrary)
                     } else {
                         _uiState.value = GameDetailUiState.Error("Juego no encontrado")
                     }

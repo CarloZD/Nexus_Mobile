@@ -1,6 +1,5 @@
 package com.tecsup.nexusmobile.presentation.ui.library
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,37 +12,28 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-
-// Modelo temporal para la biblioteca
-data class LibraryGame(
-    val id: String,
-    val title: String,
-    val imageUrl: String?,
-    val category: String,
-    val totalGames: Int = 8
-)
+import com.tecsup.nexusmobile.domain.model.Game
+import com.tecsup.nexusmobile.presentation.viewmodel.LibraryViewModel
+import com.tecsup.nexusmobile.presentation.viewmodel.LibraryUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen() {
-    // Datos de ejemplo (reemplazar con ViewModel después)
-    val games = remember {
-        listOf(
-            LibraryGame("1", "Company of Heroes", null, "Estrategia"),
-            LibraryGame("2", "Dragonball Z", null, "Acción"),
-            LibraryGame("3", "BattleFront 2", null, "Shooter"),
-            LibraryGame("4", "GTA V", null, "Aventura"),
-            LibraryGame("5", "Battlefield 2", null, "Shooter"),
-            LibraryGame("6", "APEX", null, "Battle Royale"),
-            LibraryGame("7", "Halo Automative", null, "Shooter"),
-            LibraryGame("8", "Cyberpunk", null, "RPG")
-        )
+fun LibraryScreen(
+    viewModel: LibraryViewModel = viewModel(),
+    onGameClick: (String) -> Unit = {}
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    
+    // Recargar la biblioteca cada vez que se entra a la pantalla
+    DisposableEffect(Unit) {
+        viewModel.loadLibrary()
+        onDispose { }
     }
 
     Scaffold(
@@ -67,58 +57,127 @@ fun LibraryScreen() {
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // Header con total de juegos
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Row(
+        when (val state = uiState) {
+            is LibraryUiState.Loading -> {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
-                        Text(
-                            text = "JUEGOS",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "${games.size}",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Button(
-                        onClick = { /* TODO: Buscar juegos */ },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
+                    CircularProgressIndicator()
+                }
+            }
+
+            is LibraryUiState.Success -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                ) {
+                    // Header con total de juegos
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
-                        Text("BUSCAR")
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "JUEGOS",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${state.games.size}",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Button(
+                                onClick = { /* TODO: Buscar juegos */ },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text("BUSCAR")
+                            }
+                        }
+                    }
+
+                    // Lista de juegos
+                    if (state.games.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Text(
+                                    text = "Tu biblioteca está vacía",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Compra juegos para agregarlos a tu biblioteca",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(state.games) { game ->
+                                LibraryGameCard(
+                                    game = game,
+                                    onClick = { onGameClick(game.id) }
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            // Lista de juegos
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(games) { game ->
-                    LibraryGameCard(
-                        game = game,
-                        onClick = { /* TODO: Abrir detalle */ }
-                    )
+            is LibraryUiState.Error -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Error al cargar la biblioteca",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = state.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(onClick = { viewModel.loadLibrary() }) {
+                            Text("Reintentar")
+                        }
+                    }
                 }
             }
         }
@@ -127,7 +186,7 @@ fun LibraryScreen() {
 
 @Composable
 fun LibraryGameCard(
-    game: LibraryGame,
+    game: Game,
     onClick: () -> Unit
 ) {
     Card(
@@ -153,14 +212,23 @@ fun LibraryGameCard(
                     .clip(RoundedCornerShape(8.dp)),
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
             ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Text(
-                        text = "🎮",
-                        style = MaterialTheme.typography.headlineMedium
+                if (game.headerImage != null && game.headerImage.isNotEmpty()) {
+                    AsyncImage(
+                        model = game.headerImage,
+                        contentDescription = game.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
                     )
+                } else {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Text(
+                            text = "🎮",
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
                 }
             }
 
@@ -179,7 +247,7 @@ fun LibraryGameCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = game.category,
+                    text = game.category.ifEmpty { "Sin categoría" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )

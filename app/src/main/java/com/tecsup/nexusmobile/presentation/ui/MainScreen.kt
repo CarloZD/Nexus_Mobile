@@ -5,7 +5,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +21,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.tecsup.nexusmobile.presentation.ui.cart.CartScreen
+import com.tecsup.nexusmobile.presentation.ui.checkout.CheckoutScreen
 import com.tecsup.nexusmobile.presentation.ui.community.CommunityScreen
 import com.tecsup.nexusmobile.presentation.ui.game.GameDetailScreen
 import com.tecsup.nexusmobile.presentation.ui.home.HomeScreen
@@ -48,6 +48,10 @@ object CartRoute {
     const val route = "cart"
 }
 
+object CheckoutRoute {
+    const val route = "checkout"
+}
+
 object EditProfileRoute {
     const val route = "edit_profile"
 }
@@ -58,6 +62,10 @@ object AboutRoute {
 
 object HelpSupportRoute {
     const val route = "help_support"
+}
+
+object PaymentSuccessRoute {
+    const val route = "payment_success"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,47 +83,55 @@ fun MainScreen(
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp
-            ) {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
+            // Mostrar bottom bar en las pantallas principales y en GameDetailScreen
+            val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+            val isMainScreen = items.any { it.route == currentRoute }
+            val isGameDetail = currentRoute?.startsWith("game_detail") == true
+            val shouldShowBottomBar = isMainScreen || isGameDetail
 
-                items.forEach { screen ->
-                    NavigationBarItem(
-                        icon = {
-                            Icon(
-                                imageVector = screen.icon,
-                                contentDescription = screen.title
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = screen.title,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        },
-                        selected = currentDestination?.hierarchy?.any {
-                            it.route == screen.route
-                        } == true,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+            if (shouldShowBottomBar) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 8.dp
+                ) {
+                    val navBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentDestination = navBackStackEntry?.destination
+
+                    items.forEach { screen ->
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    imageVector = screen.icon,
+                                    contentDescription = screen.title
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = screen.title,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            selected = currentDestination?.hierarchy?.any {
+                                it.route == screen.route
+                            } == true,
+                            onClick = {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -137,7 +153,11 @@ fun MainScreen(
             }
 
             composable(BottomNavScreen.Library.route) {
-                LibraryScreen()
+                LibraryScreen(
+                    onGameClick = { gameId ->
+                        navController.navigate(GameDetailRoute.createRoute(gameId))
+                    }
+                )
             }
 
             composable(BottomNavScreen.Community.route) {
@@ -172,7 +192,6 @@ fun MainScreen(
                         navController.popBackStack()
                     },
                     onAddToCart = { gameId ->
-                        // Agregar al carrito y navegar
                         navController.navigate(CartRoute.route)
                     }
                 )
@@ -184,7 +203,41 @@ fun MainScreen(
                         navController.popBackStack()
                     },
                     onProceedToCheckout = {
-                        // TODO: Navegar a checkout
+                        navController.navigate(CheckoutRoute.route)
+                    }
+                )
+            }
+
+            composable(CheckoutRoute.route) {
+                CheckoutScreen(
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                    onPaymentSuccess = {
+                        navController.navigate(PaymentSuccessRoute.route) {
+                            popUpTo(BottomNavScreen.Home.route) {
+                                inclusive = false
+                            }
+                        }
+                    }
+                )
+            }
+
+            composable(PaymentSuccessRoute.route) {
+                PaymentSuccessScreen(
+                    onNavigateToLibrary = {
+                        navController.navigate(BottomNavScreen.Library.route) {
+                            popUpTo(BottomNavScreen.Home.route) {
+                                inclusive = false
+                            }
+                        }
+                    },
+                    onNavigateToHome = {
+                        navController.navigate(BottomNavScreen.Home.route) {
+                            popUpTo(BottomNavScreen.Home.route) {
+                                inclusive = true
+                            }
+                        }
                     }
                 )
             }
@@ -212,6 +265,58 @@ fun MainScreen(
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun PaymentSuccessScreen(
+    onNavigateToLibrary: () -> Unit,
+    onNavigateToHome: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "✅",
+            style = MaterialTheme.typography.displayLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "¡Pago Exitoso!",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Tus juegos han sido agregados a tu biblioteca",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(48.dp))
+        Button(
+            onClick = onNavigateToLibrary,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+        ) {
+            Text(
+                "Ir a Mi Biblioteca",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedButton(
+            onClick = onNavigateToHome,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Seguir Explorando")
         }
     }
 }

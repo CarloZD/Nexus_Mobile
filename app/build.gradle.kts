@@ -51,6 +51,9 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
 
+    // Material Icons Extended - IMPORTANTE para todos los iconos
+    implementation("androidx.compose.material:material-icons-extended:1.7.5")
+
     //  Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
@@ -69,8 +72,6 @@ dependencies {
 
     // Coil para imágenes
     implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // No necesitamos librería externa, usaremos solución nativa
 
     // Retrofit (si lo necesitas para tu backend actual)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

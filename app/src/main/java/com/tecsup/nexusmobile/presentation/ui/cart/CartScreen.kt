@@ -7,61 +7,30 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-
-// Modelo temporal para items del carrito
-data class CartItemData(
-    val id: String,
-    val gameTitle: String,
-    val category: String,
-    val originalPrice: Double,
-    val discountedPrice: Double,
-    val quantity: Int = 1
-)
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.tecsup.nexusmobile.domain.model.CartItem
+import com.tecsup.nexusmobile.presentation.viewmodel.CartUiState
+import com.tecsup.nexusmobile.presentation.viewmodel.CartViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CartScreen(
     onNavigateBack: () -> Unit,
-    onProceedToCheckout: () -> Unit
+    onProceedToCheckout: () -> Unit,
+    viewModel: CartViewModel = viewModel()
 ) {
-    // Datos de ejemplo
-    val cartItems = remember {
-        mutableStateListOf(
-            CartItemData(
-                "1",
-                "DRAGON BALL XENOVERSE 2",
-                "Acción",
-                75.00,
-                59.99
-            ),
-            CartItemData(
-                "2",
-                "Grand theft auto 5",
-                "Aventura",
-                100.00,
-                75.00
-            ),
-            CartItemData(
-                "3",
-                "Minecraft",
-                "Supervivencia",
-                150.00,
-                100.00
-            )
-        )
-    }
-
-    val subtotal = cartItems.sumOf { it.discountedPrice * it.quantity }
-    val total = subtotal
+    val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -82,57 +51,83 @@ fun CartScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
-        },
-        bottomBar = {
-            CartSummaryBar(
-                subtotal = subtotal,
-                total = total,
-                onProceedToCheckout = onProceedToCheckout
-            )
         }
     ) { padding ->
-        if (cartItems.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(32.dp)
+        when (val state = uiState) {
+            is CartUiState.Loading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "🛒",
-                        style = MaterialTheme.typography.displayLarge
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Tu carrito está vacío",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Agrega juegos para continuar",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    CircularProgressIndicator()
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(cartItems) { item ->
-                    CartItemCard(
-                        item = item,
-                        onRemove = { cartItems.remove(item) }
+
+            is CartUiState.Success -> {
+                if (state.cart.items.isEmpty()) {
+                    EmptyCartView(
+                        modifier = Modifier.padding(padding),
+                        onNavigateBack = onNavigateBack
                     )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(state.cart.items) { item ->
+                                CartItemCard(
+                                    item = item,
+                                    onRemove = { viewModel.removeFromCart(item.gameId) },
+                                    onQuantityChange = { newQuantity ->
+                                        viewModel.updateQuantity(item.gameId, newQuantity)
+                                    }
+                                )
+                            }
+                        }
+
+                        CartSummaryBar(
+                            subtotal = state.cart.total,
+                            total = state.cart.total,
+                            onProceedToCheckout = onProceedToCheckout,
+                            onContinueShopping = onNavigateBack
+                        )
+                    }
+                }
+            }
+
+            is CartUiState.Error -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Error al cargar el carrito",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = state.message,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Button(onClick = { viewModel.loadCart() }) {
+                            Text("Reintentar")
+                        }
+                    }
                 }
             }
         }
@@ -140,9 +135,46 @@ fun CartScreen(
 }
 
 @Composable
+fun EmptyCartView(
+    modifier: Modifier = Modifier,
+    onNavigateBack: () -> Unit
+) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "🛒",
+                style = MaterialTheme.typography.displayLarge
+            )
+            Text(
+                text = "Tu carrito está vacío",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Agrega juegos para continuar",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = onNavigateBack) {
+                Text("Explorar juegos")
+            }
+        }
+    }
+}
+
+@Composable
 fun CartItemCard(
-    item: CartItemData,
-    onRemove: () -> Unit
+    item: CartItem,
+    onRemove: () -> Unit,
+    onQuantityChange: (Int) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -154,12 +186,41 @@ fun CartItemCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Imagen del juego
+            if (item.gameImage != null) {
+                AsyncImage(
+                    model = item.gameImage,
+                    contentDescription = item.gameTitle,
+                    modifier = Modifier
+                        .size(80.dp)
+                        .aspectRatio(1f),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .size(80.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Text(
+                            text = "🎮",
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+                }
+            }
+
             Column(
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = item.gameTitle,
@@ -168,43 +229,76 @@ fun CartItemCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = item.category,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "S/${item.originalPrice}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textDecoration = TextDecoration.LineThrough,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                    Text(
-                        text = "S/${item.discountedPrice}",
-                        style = MaterialTheme.typography.titleLarge,
+                        text = "S/${String.format("%.2f", item.price)}",
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                }
-            }
 
-            IconButton(
-                onClick = onRemove,
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Eliminar",
-                    modifier = Modifier.size(24.dp)
-                )
+                    // Controles de cantidad
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(
+                            onClick = { onQuantityChange(item.quantity - 1) },
+                            enabled = item.quantity > 1
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Remove,
+                                contentDescription = "Disminuir",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Text(
+                            text = "${item.quantity}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        IconButton(
+                            onClick = { onQuantityChange(item.quantity + 1) }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Aumentar",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Subtotal: S/${String.format("%.2f", item.subtotal)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    IconButton(
+                        onClick = onRemove,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Eliminar"
+                        )
+                    }
+                }
             }
         }
     }
@@ -214,7 +308,8 @@ fun CartItemCard(
 fun CartSummaryBar(
     subtotal: Double,
     total: Double,
-    onProceedToCheckout: () -> Unit
+    onProceedToCheckout: () -> Unit,
+    onContinueShopping: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -224,7 +319,8 @@ fun CartSummaryBar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -236,7 +332,8 @@ fun CartSummaryBar(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = "Resumen de Compra",
@@ -244,24 +341,8 @@ fun CartSummaryBar(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Total:",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "S/ ${"%.2f".format(subtotal)}",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
 
                     Divider(
-                        modifier = Modifier.padding(vertical = 8.dp),
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
                     )
 
@@ -269,13 +350,21 @@ fun CartSummaryBar(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
+                        Text(text = "Subtotal:")
+                        Text(text = "S/ ${String.format("%.2f", subtotal)}")
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(
-                            text = "Precio Total:",
+                            text = "Total:",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "S/ ${"%.2f".format(total)}",
+                            text = "S/ ${String.format("%.2f", total)}",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -284,17 +373,12 @@ fun CartSummaryBar(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
             Button(
                 onClick = onProceedToCheckout,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
                     text = "🛒  Proceder al Pago",
@@ -303,17 +387,12 @@ fun CartSummaryBar(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
             OutlinedButton(
-                onClick = { /* TODO: Seguir comprando */ },
+                onClick = onContinueShopping,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text(
-                    text = "← Seguir comprando",
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                Text("← Seguir comprando")
             }
         }
     }
