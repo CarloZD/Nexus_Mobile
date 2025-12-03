@@ -8,7 +8,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
@@ -19,9 +22,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -39,31 +43,95 @@ fun HomeScreen(
     onNavigateToGameDetail: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Filtrar juegos según la búsqueda
+    val filteredGames = remember(uiState, searchQuery) {
+        when (val state = uiState) {
+            is CatalogUiState.Success -> {
+                if (searchQuery.isBlank()) {
+                    state.games
+                } else {
+                    state.games.filter { game ->
+                        game.title.contains(searchQuery, ignoreCase = true) ||
+                                game.category.contains(searchQuery, ignoreCase = true) ||
+                                game.developer.contains(searchQuery, ignoreCase = true)
+                    }
+                }
+            }
+            else -> emptyList()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.logo_nexus),
-                            contentDescription = "Nexus Logo",
-                            modifier = Modifier.size(40.dp)
+                    if (isSearchActive) {
+                        // Campo de búsqueda
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 8.dp),
+                            placeholder = { Text("Buscar juegos...") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                            ),
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Limpiar")
+                                    }
+                                }
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Search
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onSearch = {
+                                    keyboardController?.hide()
+                                }
+                            )
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "NEXUS",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
+                    } else {
+                        // Logo y título normal
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_nexus),
+                                contentDescription = "Nexus Logo",
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "NEXUS",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO: Búsqueda */ }) {
-                        Icon(Icons.Default.Search, contentDescription = "Buscar")
+                    IconButton(onClick = {
+                        isSearchActive = !isSearchActive
+                        if (!isSearchActive) {
+                            searchQuery = ""
+                        }
+                    }) {
+                        Icon(
+                            imageVector = if (isSearchActive) Icons.Default.Close else Icons.Default.Search,
+                            contentDescription = if (isSearchActive) "Cerrar búsqueda" else "Buscar"
+                        )
                     }
                     IconButton(onClick = onNavigateToCart) {
                         Icon(Icons.Default.ShoppingCart, contentDescription = "Carrito")
@@ -88,69 +156,80 @@ fun HomeScreen(
             }
 
             is CatalogUiState.Success -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                ) {
-                    // Banner principal
-                    item {
-                        FeaturedBanner(
-                            game = state.games.firstOrNull { it.featured }
-                                ?: state.games.firstOrNull(),
-                            onClick = { game ->
-                                game?.let { onNavigateToGameDetail(it.id) }
-                            }
-                        )
-                    }
+                if (isSearchActive && searchQuery.isNotEmpty()) {
+                    // Vista de resultados de búsqueda
+                    SearchResultsView(
+                        games = filteredGames,
+                        searchQuery = searchQuery,
+                        onGameClick = onNavigateToGameDetail,
+                        modifier = Modifier.padding(padding)
+                    )
+                } else {
+                    // Vista normal del Home
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                    ) {
+                        // Banner principal
+                        item {
+                            FeaturedBanner(
+                                game = state.games.firstOrNull { it.featured }
+                                    ?: state.games.firstOrNull(),
+                                onClick = { game ->
+                                    game?.let { onNavigateToGameDetail(it.id) }
+                                }
+                            )
+                        }
 
-                    // Categorías
-                    item {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        CategoryChips()
-                    }
+                        // Categorías
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            CategoryChips()
+                        }
 
-                    // Ofertas especiales
-                    item {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = "OFERTAS ESPECIALES",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
+                        // Ofertas especiales
+                        item {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text(
+                                text = "OFERTAS ESPECIALES",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
 
-                    item {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(state.games.take(6)) { game ->
-                                GameCard(
-                                    game = game,
-                                    onClick = { onNavigateToGameDetail(game.id) }
-                                )
+                        item {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(state.games.take(6)) { game ->
+                                    GameCard(
+                                        game = game,
+                                        onClick = { onNavigateToGameDetail(game.id) }
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    // Noticias y actualizaciones
-                    item {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = "NOTICIAS Y ACTUALIZACIONES",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
+                        // Noticias y actualizaciones
+                        item {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text(
+                                text = "NOTICIAS Y ACTUALIZACIONES",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
 
-                    item {
-                        NewsSection()
-                        Spacer(modifier = Modifier.height(16.dp))
+                        item {
+                            NewsSection()
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
                     }
                 }
             }
@@ -180,6 +259,152 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = { viewModel.loadGames() }) {
                             Text("Reintentar")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchResultsView(
+    games: List<Game>,
+    searchQuery: String,
+    onGameClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = if (games.isEmpty())
+                "No se encontraron resultados para \"$searchQuery\""
+            else
+                "${games.size} resultado(s) para \"$searchQuery\"",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        if (games.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "🔍",
+                        style = MaterialTheme.typography.displayLarge
+                    )
+                    Text(
+                        text = "No encontramos juegos con ese nombre",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Intenta con otro término de búsqueda",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(games) { game ->
+                    SearchGameCard(
+                        game = game,
+                        onClick = { onGameClick(game.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchGameCard(
+    game: Game,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Imagen
+            AsyncImage(
+                model = game.headerImage ?: game.backgroundImage,
+                contentDescription = game.title,
+                modifier = Modifier
+                    .width(120.dp)
+                    .fillMaxHeight(),
+                contentScale = ContentScale.Crop
+            )
+
+            // Información
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = game.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = game.category,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (game.isFree) "GRATIS" else "S/${game.price}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (game.isFree)
+                            Color(0xFF00FF00)
+                        else
+                            MaterialTheme.colorScheme.secondary
+                    )
+
+                    if (game.rating > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "★",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFFFD700)
+                            )
+                            Text(
+                                text = String.format("%.1f", game.rating),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     }
                 }
@@ -296,7 +521,6 @@ fun CategoryChips() {
         }
     }
 }
-
 
 @Composable
 fun NewsSection() {
