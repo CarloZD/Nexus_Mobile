@@ -16,6 +16,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tecsup.nexusmobile.presentation.viewmodel.CartViewModel
 import com.tecsup.nexusmobile.presentation.viewmodel.GameDetailUiState
 import com.tecsup.nexusmobile.presentation.viewmodel.GameDetailViewModel
+import com.tecsup.nexusmobile.presentation.viewmodel.ReviewViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,9 +30,37 @@ fun GameDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showAddedToCartSnackbar by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    
+    val reviewViewModel: ReviewViewModel = viewModel()
+    val reviewState by reviewViewModel.uiState.collectAsState()
+    val addReviewState by reviewViewModel.addReviewState.collectAsState()
+    
+    var hasNavigatedOnSuccess by remember { mutableStateOf(false) }
 
     LaunchedEffect(gameId) {
-        viewModel.loadGame(gameId)
+        if (gameId.isNotEmpty()) {
+            try {
+                viewModel.loadGame(gameId)
+            } catch (e: Exception) {
+                // Error manejado por el ViewModel
+            }
+            try {
+                reviewViewModel.loadReviews(gameId)
+            } catch (e: Exception) {
+                // Error manejado por el ViewModel
+            }
+        }
+    }
+    
+    LaunchedEffect(addReviewState) {
+        if (addReviewState is com.tecsup.nexusmobile.presentation.viewmodel.AddReviewUiState.Success && !hasNavigatedOnSuccess) {
+            hasNavigatedOnSuccess = true
+            snackbarHostState.showSnackbar(
+                message = "¡Reseña publicada exitosamente!",
+                duration = SnackbarDuration.Short
+            )
+            reviewViewModel.resetAddReviewState()
+        }
     }
 
     LaunchedEffect(showAddedToCartSnackbar) {
@@ -177,18 +206,49 @@ fun GameDetailScreen(
 
                         Divider()
 
-                        ReviewSection(
-                            reviews = emptyList(),
-                            gameId = gameId,
-                            isGameInLibrary = when (val state = uiState) {
-                                is GameDetailUiState.Success -> state.isInLibrary
-                                else -> false
-                            },
-                            onAddReview = { comment, rating ->
-                                // TODO: Implementar guardado de reseña en Firestore
-                                // Por ahora solo mostramos un mensaje
+                        when (val reviewStateValue = reviewState) {
+                            is com.tecsup.nexusmobile.presentation.viewmodel.ReviewUiState.Loading -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
                             }
-                        )
+                            is com.tecsup.nexusmobile.presentation.viewmodel.ReviewUiState.Error -> {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    )
+                                ) {
+                                    Text(
+                                        text = "Error al cargar reseñas: ${reviewStateValue.message}",
+                                        modifier = Modifier.padding(16.dp),
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                            else -> {
+                                ReviewSection(
+                                    reviews = when (val state = reviewState) {
+                                        is com.tecsup.nexusmobile.presentation.viewmodel.ReviewUiState.Success -> state.reviews
+                                        else -> emptyList()
+                                    },
+                                    gameId = gameId,
+                                    isGameInLibrary = when (val state = uiState) {
+                                        is GameDetailUiState.Success -> state.isInLibrary
+                                        else -> false
+                                    },
+                                    onAddReview = { comment, rating ->
+                                        reviewViewModel.addReview(gameId, comment, rating)
+                                    },
+                                    isLoadingReview = addReviewState is com.tecsup.nexusmobile.presentation.viewmodel.AddReviewUiState.Loading
+                                )
+                            }
+                        }
                     }
                 }
             }

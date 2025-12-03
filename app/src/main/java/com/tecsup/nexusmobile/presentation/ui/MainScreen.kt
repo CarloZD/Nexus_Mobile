@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -186,15 +187,37 @@ fun MainScreen(
                 )
             ) { backStackEntry ->
                 val gameId = backStackEntry.arguments?.getString("gameId") ?: ""
-                GameDetailScreen(
-                    gameId = gameId,
-                    onBackClick = {
-                        navController.popBackStack()
-                    },
-                    onAddToCart = { gameId ->
-                        navController.navigate(CartRoute.route)
+                if (gameId.isEmpty()) {
+                    // Si no hay gameId, mostrar error y volver atrás
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                text = "Error: Juego no encontrado",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Button(onClick = { navController.popBackStack() }) {
+                                Text("Volver")
+                            }
+                        }
                     }
-                )
+                } else {
+                    GameDetailScreen(
+                        gameId = gameId,
+                        onBackClick = {
+                            navController.popBackStack()
+                        },
+                        onAddToCart = { gameId ->
+                            navController.navigate(CartRoute.route)
+                        }
+                    )
+                }
             }
 
             composable(CartRoute.route) {

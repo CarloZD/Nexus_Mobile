@@ -31,9 +31,12 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsState()
     
     // Recargar la biblioteca cada vez que se entra a la pantalla
-    DisposableEffect(Unit) {
-        viewModel.loadLibrary()
-        onDispose { }
+    LaunchedEffect(Unit) {
+        try {
+            viewModel.loadLibrary()
+        } catch (e: Exception) {
+            // Error manejado por el ViewModel
+        }
     }
 
     Scaffold(

@@ -2,6 +2,7 @@ package com.tecsup.nexusmobile.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tecsup.nexusmobile.data.repository.LibraryRepositoryImpl
 import com.tecsup.nexusmobile.data.repository.ProfileRepositoryImpl
 import com.tecsup.nexusmobile.domain.model.User
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,13 +23,17 @@ sealed class UpdateProfileUiState {
 }
 
 class ProfileViewModel(
-    private val repository: ProfileRepositoryImpl = ProfileRepositoryImpl()
+    private val repository: ProfileRepositoryImpl = ProfileRepositoryImpl(),
+    private val libraryRepository: LibraryRepositoryImpl = LibraryRepositoryImpl()
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<ProfileUiState>(ProfileUiState.Loading)
     val uiState: StateFlow<ProfileUiState> = _uiState
 
     private val _updateState = MutableStateFlow<UpdateProfileUiState>(UpdateProfileUiState.Idle)
     val updateState: StateFlow<UpdateProfileUiState> = _updateState
+
+    private val _totalGames = MutableStateFlow<Int>(0)
+    val totalGames: StateFlow<Int> = _totalGames
 
     init {
         loadProfile()
@@ -41,6 +46,8 @@ class ProfileViewModel(
                 .onSuccess { user ->
                     if (user != null) {
                         _uiState.value = ProfileUiState.Success(user)
+                        // Cargar total de juegos
+                        loadTotalGames()
                     } else {
                         _uiState.value = ProfileUiState.Error("Usuario no encontrado")
                     }
@@ -50,6 +57,22 @@ class ProfileViewModel(
                         error.message ?: "Error al cargar el perfil"
                     )
                 }
+        }
+    }
+
+    private fun loadTotalGames() {
+        viewModelScope.launch {
+            try {
+                libraryRepository.getUserLibrary()
+                    .onSuccess { games ->
+                        _totalGames.value = games.size
+                    }
+                    .onFailure {
+                        _totalGames.value = 0
+                    }
+            } catch (e: Exception) {
+                _totalGames.value = 0
+            }
         }
     }
 

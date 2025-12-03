@@ -82,9 +82,10 @@ fun ProfileScreen(
                 ) {
                     // Header con información del usuario
                     item {
+                        val totalGames by viewModel.totalGames.collectAsState()
                         UserProfileHeader(
                             user = state.user,
-                            totalGames = 0 // TODO: Obtener de la biblioteca cuando esté implementada
+                            totalGames = totalGames
                         )
                     }
 

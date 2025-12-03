@@ -21,11 +21,13 @@ fun ReviewSection(
     gameId: String = "",
     isGameInLibrary: Boolean = false,
     modifier: Modifier = Modifier,
-    onAddReview: (String, Int) -> Unit = { _, _ -> }
+    onAddReview: (String, Int) -> Unit = { _, _ -> },
+    isLoadingReview: Boolean = false
 ) {
     var showAddReviewDialog by remember { mutableStateOf(false) }
     var commentText by remember { mutableStateOf("") }
     var selectedRating by remember { mutableStateOf(0) }
+    var isLoading by remember { mutableStateOf(false) }
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -154,16 +156,23 @@ fun ReviewSection(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (commentText.isNotBlank() && selectedRating > 0) {
+                        if (commentText.isNotBlank() && selectedRating > 0 && !isLoadingReview) {
                             onAddReview(commentText, selectedRating)
                             showAddReviewDialog = false
                             commentText = ""
                             selectedRating = 0
                         }
                     },
-                    enabled = commentText.isNotBlank() && selectedRating > 0
+                    enabled = commentText.isNotBlank() && selectedRating > 0 && !isLoadingReview
                 ) {
-                    Text("Publicar")
+                    if (isLoadingReview) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Text("Publicar")
+                    }
                 }
             },
             dismissButton = {

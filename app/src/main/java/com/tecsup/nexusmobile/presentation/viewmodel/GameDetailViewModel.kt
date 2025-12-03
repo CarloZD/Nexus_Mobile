@@ -26,23 +26,34 @@ class GameDetailViewModel(
 
     fun loadGame(gameId: String) {
         viewModelScope.launch {
-            _uiState.value = GameDetailUiState.Loading
-            getGameByIdUseCase(gameId)
-                .onSuccess { game ->
-                    if (game != null) {
-                        // Verificar si el juego está en la biblioteca
-                        val isInLibrary = libraryRepository.isGameInLibrary(gameId)
-                            .getOrElse { false }
-                        _uiState.value = GameDetailUiState.Success(game, isInLibrary)
-                    } else {
-                        _uiState.value = GameDetailUiState.Error("Juego no encontrado")
+            try {
+                _uiState.value = GameDetailUiState.Loading
+                getGameByIdUseCase(gameId)
+                    .onSuccess { game ->
+                        if (game != null) {
+                            // Verificar si el juego está en la biblioteca de forma segura
+                            val isInLibrary = try {
+                                libraryRepository.isGameInLibrary(gameId)
+                                    .getOrElse { false }
+                            } catch (e: Exception) {
+                                // Si hay error al verificar biblioteca, asumir que no está
+                                false
+                            }
+                            _uiState.value = GameDetailUiState.Success(game, isInLibrary)
+                        } else {
+                            _uiState.value = GameDetailUiState.Error("Juego no encontrado")
+                        }
                     }
-                }
-                .onFailure { error ->
-                    _uiState.value = GameDetailUiState.Error(
-                        error.message ?: "Error al cargar el juego"
-                    )
-                }
+                    .onFailure { error ->
+                        _uiState.value = GameDetailUiState.Error(
+                            error.message ?: "Error al cargar el juego"
+                        )
+                    }
+            } catch (e: Exception) {
+                _uiState.value = GameDetailUiState.Error(
+                    e.message ?: "Error inesperado al cargar el juego"
+                )
+            }
         }
     }
 }
