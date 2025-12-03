@@ -26,6 +26,7 @@ import com.tecsup.nexusmobile.presentation.ui.community.CommunityScreen
 import com.tecsup.nexusmobile.presentation.ui.game.GameDetailScreen
 import com.tecsup.nexusmobile.presentation.ui.home.HomeScreen
 import com.tecsup.nexusmobile.presentation.ui.library.LibraryScreen
+import com.tecsup.nexusmobile.presentation.ui.profile.EditProfileScreen
 import com.tecsup.nexusmobile.presentation.ui.profile.ProfileScreen
 
 // Rutas de navegación
@@ -43,6 +44,10 @@ object GameDetailRoute {
 
 object CartRoute {
     const val route = "cart"
+}
+
+object EditProfileRoute {
+    const val route = "edit_profile"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,7 +136,10 @@ fun MainScreen(
 
             composable(BottomNavScreen.Profile.route) {
                 ProfileScreen(
-                    onLogout = onLogout
+                    onLogout = onLogout,
+                    onNavigateToEditProfile = {
+                        navController.navigate(EditProfileRoute.route)
+                    }
                 )
             }
 
@@ -161,6 +169,14 @@ fun MainScreen(
                     },
                     onProceedToCheckout = {
                         // TODO: Navegar a checkout
+                    }
+                )
+            }
+
+            composable(EditProfileRoute.route) {
+                EditProfileScreen(
+                    onBackClick = {
+                        navController.popBackStack()
                     }
                 )
             }

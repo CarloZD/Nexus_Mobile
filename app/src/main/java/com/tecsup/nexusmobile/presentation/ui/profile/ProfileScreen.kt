@@ -22,12 +22,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.tecsup.nexusmobile.presentation.viewmodel.ProfileUiState
+import com.tecsup.nexusmobile.presentation.viewmodel.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onNavigateToEditProfile: () -> Unit = {},
+    viewModel: ProfileViewModel = viewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -51,17 +58,33 @@ fun ProfileScreen(
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Header con información del usuario
-            item {
-                UserProfileHeader()
+        when (val state = uiState) {
+            is ProfileUiState.Loading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
+
+            is ProfileUiState.Success -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header con información del usuario
+                    item {
+                        UserProfileHeader(
+                            user = state.user,
+                            totalGames = 0 // TODO: Obtener de la biblioteca cuando esté implementada
+                        )
+                    }
 
             // Sección de configuración de cuenta
             item {
@@ -79,7 +102,7 @@ fun ProfileScreen(
                 ProfileMenuItem(
                     icon = Icons.Default.Person,
                     title = "Editar Perfil",
-                    onClick = { /* TODO */ }
+                    onClick = onNavigateToEditProfile
                 )
             }
 
@@ -135,6 +158,37 @@ fun ProfileScreen(
                     isDestructive = true
                 )
             }
+                }
+            }
+
+            is ProfileUiState.Error -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Error al cargar el perfil",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = state.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(onClick = { viewModel.loadProfile() }) {
+                            Text("Reintentar")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -181,7 +235,10 @@ fun ProfileScreen(
 }
 
 @Composable
-fun UserProfileHeader() {
+fun UserProfileHeader(
+    user: com.tecsup.nexusmobile.domain.model.User,
+    totalGames: Int = 0
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -206,12 +263,20 @@ fun UserProfileHeader() {
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Avatar",
-                        modifier = Modifier.size(50.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
+                    if (user.avatarUrl != null) {
+                        AsyncImage(
+                            model = user.avatarUrl,
+                            contentDescription = "Avatar",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Avatar",
+                            modifier = Modifier.size(50.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 }
             }
 
@@ -219,7 +284,7 @@ fun UserProfileHeader() {
 
             // Username
             Text(
-                text = "REDSTRIKE23",
+                text = user.username.ifEmpty { user.email.split("@").firstOrNull() ?: "Usuario" },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -228,33 +293,18 @@ fun UserProfileHeader() {
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Gamer Profesional",
+                text = user.fullName.ifEmpty { user.email },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Stats
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                StatItem(
-                    value = "8",
-                    label = "TOTAL DE JUEGOS"
-                )
-                Divider(
-                    modifier = Modifier
-                        .height(40.dp)
-                        .width(1.dp),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
-                )
-                StatItem(
-                    value = "156h",
-                    label = "TIEMPO JUGADO"
-                )
-            }
+            // Stats - Solo total de juegos
+            StatItem(
+                value = totalGames.toString(),
+                label = "TOTAL DE JUEGOS"
+            )
         }
     }
 }
