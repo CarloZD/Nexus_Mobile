@@ -34,19 +34,24 @@ class ReviewViewModel(
         viewModelScope.launch {
             try {
                 _uiState.value = ReviewUiState.Loading
+                if (gameId.isEmpty()) {
+                    _uiState.value = ReviewUiState.Success(emptyList())
+                    return@launch
+                }
                 repository.getReviewsByGameId(gameId)
                     .onSuccess { reviews ->
                         _uiState.value = ReviewUiState.Success(reviews)
                     }
                     .onFailure { error ->
-                        _uiState.value = ReviewUiState.Error(
-                            error.message ?: "Error al cargar las reseñas"
-                        )
+                        // En caso de error, mostrar lista vacía en lugar de error para no bloquear la pantalla
+                        _uiState.value = ReviewUiState.Success(emptyList())
+                        // Log del error para debug
+                        android.util.Log.e("ReviewViewModel", "Error al cargar reseñas: ${error.message}", error)
                     }
             } catch (e: Exception) {
-                _uiState.value = ReviewUiState.Error(
-                    e.message ?: "Error inesperado al cargar las reseñas"
-                )
+                // En caso de excepción, mostrar lista vacía en lugar de error
+                _uiState.value = ReviewUiState.Success(emptyList())
+                android.util.Log.e("ReviewViewModel", "Excepción al cargar reseñas: ${e.message}", e)
             }
         }
     }

@@ -20,18 +20,30 @@ class ReviewRepositoryImpl : ReviewRepository {
                 return Result.success(emptyList())
             }
             // Primero filtramos por gameId, luego ordenamos en memoria para evitar necesidad de índice
-            val snapshot = reviewsCollection
-                .whereEqualTo("gameId", gameId)
-                .get()
-                .await()
+            val snapshot = try {
+                reviewsCollection
+                    .whereEqualTo("gameId", gameId)
+                    .get()
+                    .await()
+            } catch (e: Exception) {
+                android.util.Log.e("ReviewRepository", "Error al obtener snapshot: ${e.message}", e)
+                return Result.success(emptyList())
+            }
 
             val reviewsWithTimestamp = snapshot.documents.mapNotNull { doc ->
                 try {
                     // Mapeo manual para evitar problemas con tipos o campos faltantes
-                    val gameId = doc.getString("gameId") ?: ""
+                    val docGameId = doc.getString("gameId") ?: ""
                     val userId = doc.getString("userId") ?: ""
                     val userName = doc.getString("userName") ?: "Usuario"
-                    val rating = (doc.getLong("rating") ?: doc.get("rating") as? Number)?.toInt() ?: 0
+                    
+                    // Manejar rating que puede ser Long o Int
+                    val ratingValue = when {
+                        doc.get("rating") is Long -> (doc.get("rating") as Long).toInt()
+                        doc.get("rating") is Number -> (doc.get("rating") as Number).toInt()
+                        else -> 0
+                    }
+                    
                     val comment = doc.getString("comment") ?: ""
                     val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
                     val dateString = doc.getString("date") ?: ""
@@ -44,17 +56,17 @@ class ReviewRepositoryImpl : ReviewRepository {
                     
                     val review = Review(
                         id = doc.id,
-                        gameId = gameId,
+                        gameId = docGameId,
                         userId = userId,
                         userName = userName,
-                        rating = rating,
+                        rating = ratingValue,
                         comment = comment,
                         date = formattedDate
                     )
                     
                     Pair(review, timestamp)
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    android.util.Log.e("ReviewRepository", "Error al mapear documento ${doc.id}: ${e.message}", e)
                     null
                 }
             }
