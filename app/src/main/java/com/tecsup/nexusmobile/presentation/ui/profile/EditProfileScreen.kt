@@ -1,26 +1,17 @@
 package com.tecsup.nexusmobile.presentation.ui.profile
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.tecsup.nexusmobile.presentation.viewmodel.ProfileUiState
 import com.tecsup.nexusmobile.presentation.viewmodel.ProfileViewModel
 import com.tecsup.nexusmobile.presentation.viewmodel.UpdateProfileUiState
@@ -33,28 +24,11 @@ fun EditProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
-    val context = LocalContext.current
 
     var username by remember { mutableStateOf("") }
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var isUpdatingProfile by remember { mutableStateOf(false) }
-
-    // Launcher para seleccionar imagen de la galería
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            selectedImageUri = it
-            when (val state = uiState) {
-                is ProfileUiState.Success -> {
-                    viewModel.uploadProfileImage(state.user.id, it)
-                }
-                else -> {}
-            }
-        }
-    }
 
     // Cargar datos del usuario cuando se carga el estado
     LaunchedEffect(uiState) {
@@ -63,10 +37,6 @@ fun EditProfileScreen(
                 username = state.user.username
                 fullName = state.user.fullName
                 email = state.user.email
-                // Limpiar URI local si el usuario tiene avatarUrl (imagen ya subida)
-                if (state.user.avatarUrl != null && state.user.avatarUrl.isNotEmpty()) {
-                    selectedImageUri = null
-                }
             }
             else -> {}
         }
@@ -130,81 +100,6 @@ fun EditProfileScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    // Avatar
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Surface(
-                            modifier = Modifier
-                                .size(120.dp)
-                                .clip(CircleShape)
-                                .clickable {
-                                    imagePickerLauncher.launch("image/*")
-                                },
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                when {
-                                    selectedImageUri != null -> {
-                                        AsyncImage(
-                                            model = selectedImageUri,
-                                            contentDescription = "Avatar",
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                    state.user.avatarUrl != null && state.user.avatarUrl.isNotEmpty() -> {
-                                        AsyncImage(
-                                            model = state.user.avatarUrl,
-                                            contentDescription = "Avatar",
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                    else -> {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = "Avatar",
-                                            modifier = Modifier.size(60.dp),
-                                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                    }
-                                }
-                                
-                                // Indicador de carga si se está subiendo
-                                if (updateState is UpdateProfileUiState.Loading) {
-                                    Surface(
-                                        modifier = Modifier.fillMaxSize(),
-                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.align(Alignment.Center)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        TextButton(
-                            onClick = {
-                                imagePickerLauncher.launch("image/*")
-                            },
-                            enabled = updateState !is UpdateProfileUiState.Loading
-                        ) {
-                            Text(
-                                if (updateState is UpdateProfileUiState.Loading) {
-                                    "Subiendo imagen..."
-                                } else {
-                                    "Cambiar foto de perfil"
-                                }
-                            )
-                        }
-                    }
-
-                    Divider()
-
                     // Formulario
                     Column(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -289,11 +184,29 @@ fun EditProfileScreen(
                                     containerColor = MaterialTheme.colorScheme.errorContainer
                                 )
                             ) {
-                                Text(
-                                    text = update.message,
+                                Column(
                                     modifier = Modifier.padding(16.dp),
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Error al subir imagen",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Text(
+                                        text = update.message,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    if (update.message.contains("Firebase Storage no está configurado")) {
+                                        Text(
+                                            text = "Nota: Necesitas habilitar Firebase Storage en la consola de Firebase y configurar las reglas de seguridad.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
                             }
                         }
                         else -> {}

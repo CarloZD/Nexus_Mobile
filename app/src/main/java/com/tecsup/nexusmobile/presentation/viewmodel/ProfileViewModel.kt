@@ -1,6 +1,5 @@
 package com.tecsup.nexusmobile.presentation.viewmodel
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tecsup.nexusmobile.data.repository.ProfileRepositoryImpl
@@ -77,23 +76,5 @@ class ProfileViewModel(
 
     fun resetUpdateState() {
         _updateState.value = UpdateProfileUiState.Idle
-    }
-
-    fun uploadProfileImage(userId: String, imageUri: Uri) {
-        viewModelScope.launch {
-            _updateState.value = UpdateProfileUiState.Loading
-            repository.uploadAndUpdateProfileImage(userId, imageUri)
-                .onSuccess { imageUrl ->
-                    // Recargar el perfil para obtener los datos actualizados
-                    loadProfile()
-                    // El estado se actualizará automáticamente cuando loadProfile() complete
-                    _updateState.value = UpdateProfileUiState.Idle
-                }
-                .onFailure { error ->
-                    _updateState.value = UpdateProfileUiState.Error(
-                        error.message ?: "Error al subir la imagen"
-                    )
-                }
-        }
     }
 }

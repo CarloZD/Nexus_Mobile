@@ -26,7 +26,9 @@ import com.tecsup.nexusmobile.presentation.ui.community.CommunityScreen
 import com.tecsup.nexusmobile.presentation.ui.game.GameDetailScreen
 import com.tecsup.nexusmobile.presentation.ui.home.HomeScreen
 import com.tecsup.nexusmobile.presentation.ui.library.LibraryScreen
+import com.tecsup.nexusmobile.presentation.ui.profile.AboutScreen
 import com.tecsup.nexusmobile.presentation.ui.profile.EditProfileScreen
+import com.tecsup.nexusmobile.presentation.ui.profile.HelpSupportScreen
 import com.tecsup.nexusmobile.presentation.ui.profile.ProfileScreen
 
 // Rutas de navegación
@@ -48,6 +50,14 @@ object CartRoute {
 
 object EditProfileRoute {
     const val route = "edit_profile"
+}
+
+object AboutRoute {
+    const val route = "about"
+}
+
+object HelpSupportRoute {
+    const val route = "help_support"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -139,6 +149,12 @@ fun MainScreen(
                     onLogout = onLogout,
                     onNavigateToEditProfile = {
                         navController.navigate(EditProfileRoute.route)
+                    },
+                    onNavigateToAbout = {
+                        navController.navigate(AboutRoute.route)
+                    },
+                    onNavigateToHelpSupport = {
+                        navController.navigate(HelpSupportRoute.route)
                     }
                 )
             }
@@ -175,6 +191,22 @@ fun MainScreen(
 
             composable(EditProfileRoute.route) {
                 EditProfileScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(AboutRoute.route) {
+                AboutScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(HelpSupportRoute.route) {
+                HelpSupportScreen(
                     onBackClick = {
                         navController.popBackStack()
                     }

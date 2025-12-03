@@ -32,6 +32,8 @@ import com.tecsup.nexusmobile.presentation.viewmodel.ProfileViewModel
 fun ProfileScreen(
     onLogout: () -> Unit,
     onNavigateToEditProfile: () -> Unit = {},
+    onNavigateToAbout: () -> Unit = {},
+    onNavigateToHelpSupport: () -> Unit = {},
     viewModel: ProfileViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -138,7 +140,7 @@ fun ProfileScreen(
                 ProfileMenuItem(
                     icon = Icons.Default.Info,
                     title = "Acerca de",
-                    onClick = { /* TODO */ }
+                    onClick = onNavigateToAbout
                 )
             }
 
@@ -146,7 +148,7 @@ fun ProfileScreen(
                 ProfileMenuItem(
                     icon = Icons.Default.Info,
                     title = "Ayuda y Soporte",
-                    onClick = { /* TODO */ }
+                    onClick = onNavigateToHelpSupport
                 )
             }
 

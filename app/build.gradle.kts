@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.tecsup.nexus_mobile"
-        minSdk = 26
+        minSdk = 36
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -70,10 +70,13 @@ dependencies {
     // Coil para imágenes
     implementation("io.coil-kt:coil-compose:2.5.0")
 
+    // No necesitamos librería externa, usaremos solución nativa
+
     // Retrofit (si lo necesitas para tu backend actual)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation(libs.androidx.animation.core.lint)
+    implementation(libs.generativeai)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
