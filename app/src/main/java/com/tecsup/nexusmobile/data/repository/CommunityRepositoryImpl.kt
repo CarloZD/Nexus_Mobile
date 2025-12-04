@@ -59,23 +59,23 @@ class CommunityRepositoryImpl : CommunityRepository {
         return try {
             val postDoc = postsCollection.document(postId).get().await()
             val post = postDoc.toObject(Post::class.java) ?: throw Exception("Post no encontrado")
-            
+
             val likedBy = post.likedBy.toMutableList()
             val isLiked = likedBy.contains(userId)
-            
+
             if (isLiked) {
                 likedBy.remove(userId)
             } else {
                 likedBy.add(userId)
             }
-            
+
             postsCollection.document(postId).update(
                 mapOf(
                     "likedBy" to likedBy,
                     "likesCount" to likedBy.size
                 )
             ).await()
-            
+
             Result.success(!isLiked)
         } catch (e: Exception) {
             Result.failure(e)
@@ -84,17 +84,30 @@ class CommunityRepositoryImpl : CommunityRepository {
 
     override suspend fun getCommentsByPostId(postId: String): Result<List<Comment>> {
         return try {
+            android.util.Log.d("CommunityRepo", "Obteniendo comentarios para post: $postId")
+
             val snapshot = commentsCollection
                 .whereEqualTo("postId", postId)
                 .orderBy("createdAt", Query.Direction.ASCENDING)
                 .get()
                 .await()
 
+            android.util.Log.d("CommunityRepo", "Documentos encontrados: ${snapshot.documents.size}")
+
             val comments = snapshot.documents.mapNotNull { doc ->
-                doc.toObject(Comment::class.java)?.copy(id = doc.id)
+                try {
+                    android.util.Log.d("CommunityRepo", "Procesando doc: ${doc.id}, data: ${doc.data}")
+                    doc.toObject(Comment::class.java)?.copy(id = doc.id)
+                } catch (e: Exception) {
+                    android.util.Log.e("CommunityRepo", "Error al parsear comentario ${doc.id}: ${e.message}")
+                    null
+                }
             }
+
+            android.util.Log.d("CommunityRepo", "Comentarios parseados exitosamente: ${comments.size}")
             Result.success(comments)
         } catch (e: Exception) {
+            android.util.Log.e("CommunityRepo", "Error al obtener comentarios: ${e.message}")
             Result.failure(e)
         }
     }
@@ -107,7 +120,28 @@ class CommunityRepositoryImpl : CommunityRepository {
         content: String
     ): Result<Comment> {
         return try {
-            val comment = Comment(
+            android.util.Log.d("CommunityRepo", "Agregando comentario - Post: $postId, Usuario: $userName")
+
+            // Crear el comentario con estructura clara
+            val commentData = hashMapOf(
+                "postId" to postId,
+                "userId" to userId,
+                "userName" to userName,
+                "userAvatarUrl" to (userAvatarUrl ?: ""),
+                "content" to content,
+                "createdAt" to System.currentTimeMillis()
+            )
+
+            android.util.Log.d("CommunityRepo", "Datos del comentario: $commentData")
+
+            // Agregar a Firestore
+            val docRef = commentsCollection.add(commentData).await()
+
+            android.util.Log.d("CommunityRepo", "Comentario agregado con ID: ${docRef.id}")
+
+            // Crear el objeto Comment para retornar
+            val createdComment = Comment(
+                id = docRef.id,
                 postId = postId,
                 userId = userId,
                 userName = userName,
@@ -116,16 +150,20 @@ class CommunityRepositoryImpl : CommunityRepository {
                 createdAt = System.currentTimeMillis()
             )
 
-            val docRef = commentsCollection.add(comment).await()
-            val createdComment = comment.copy(id = docRef.id)
-            
             // Actualizar el contador de comentarios en el post
-            val postDoc = postsCollection.document(postId).get().await()
-            val currentCount = postDoc.getLong("commentsCount")?.toInt() ?: 0
-            postsCollection.document(postId).update("commentsCount", currentCount + 1).await()
-            
+            try {
+                val postDoc = postsCollection.document(postId).get().await()
+                val currentCount = postDoc.getLong("commentsCount")?.toInt() ?: 0
+                postsCollection.document(postId).update("commentsCount", currentCount + 1).await()
+                android.util.Log.d("CommunityRepo", "Contador actualizado: ${currentCount + 1}")
+            } catch (e: Exception) {
+                android.util.Log.e("CommunityRepo", "Error al actualizar contador: ${e.message}")
+                // No fallar si el contador no se actualiza
+            }
+
             Result.success(createdComment)
         } catch (e: Exception) {
+            android.util.Log.e("CommunityRepo", "Error al agregar comentario: ${e.message}", e)
             Result.failure(e)
         }
     }

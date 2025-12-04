@@ -18,10 +18,11 @@ data class Comment(
         get() = when (_createdAt) {
             is Timestamp -> _createdAt.toDate().time
             is Long -> _createdAt
+            is Number -> _createdAt.toLong()
             else -> System.currentTimeMillis()
         }
 
-    // Constructor para crear nuevos comentarios
+    // Constructor secundario para crear nuevos comentarios fácilmente
     constructor(
         id: String = "",
         postId: String = "",
@@ -39,4 +40,16 @@ data class Comment(
         content = content,
         _createdAt = createdAt
     )
+
+    // Metodo para convertir a Map para Firestore
+    fun toMap(): Map<String, Any?> {
+        return mapOf(
+            "postId" to postId,
+            "userId" to userId,
+            "userName" to userName,
+            "userAvatarUrl" to userAvatarUrl,
+            "content" to content,
+            "createdAt" to System.currentTimeMillis()
+        )
+    }
 }

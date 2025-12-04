@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.tecsup.nexusmobile.data.repository.CommunityRepositoryImpl
 import com.tecsup.nexusmobile.domain.model.Comment
 import com.tecsup.nexusmobile.domain.model.Post
@@ -30,7 +31,7 @@ class CommunityViewModel(
 ) : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
-    
+
     private val _uiState = MutableStateFlow<CommunityUiState>(CommunityUiState.Loading)
     val uiState: StateFlow<CommunityUiState> = _uiState
 
@@ -40,8 +41,36 @@ class CommunityViewModel(
     private val _comments = MutableStateFlow<Map<String, List<Comment>>>(emptyMap())
     val comments: StateFlow<Map<String, List<Comment>>> = _comments
 
+    private val commentListeners = mutableMapOf<String, ListenerRegistration>()
+    private var postsListener: ListenerRegistration? = null
+
     init {
-        loadPosts()
+        setupRealtimePostsListener()
+    }
+
+    // Listener en tiempo real para posts
+    private fun setupRealtimePostsListener() {
+        _uiState.value = CommunityUiState.Loading
+
+        postsListener = firestore.collection("posts")
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    _uiState.value = CommunityUiState.Error(
+                        error.message ?: "Error al cargar los posts"
+                    )
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val posts = snapshot.documents.mapNotNull { doc ->
+                        doc.toObject(Post::class.java)?.copy(id = doc.id)
+                    }
+                    _uiState.value = CommunityUiState.Success(posts)
+                } else {
+                    _uiState.value = CommunityUiState.Success(emptyList())
+                }
+            }
     }
 
     fun loadPosts() {
@@ -68,7 +97,7 @@ class CommunityViewModel(
             }
 
             _createPostState.value = CreatePostUiState.Loading
-            
+
             // Obtener información del usuario desde Firestore
             val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
             val userName = userDoc.getString("username")?.ifEmpty { null }
@@ -86,7 +115,7 @@ class CommunityViewModel(
             )
                 .onSuccess { post ->
                     _createPostState.value = CreatePostUiState.Success(post)
-                    loadPosts() // Recargar posts
+                    // No necesitamos recargar manualmente, el listener se encarga
                 }
                 .onFailure { error ->
                     _createPostState.value = CreatePostUiState.Error(
@@ -101,55 +130,104 @@ class CommunityViewModel(
             val currentUser = auth.currentUser ?: return@launch
             repository.toggleLike(postId, currentUser.uid)
                 .onSuccess {
-                    loadPosts() // Recargar posts para actualizar likes
-                }
-                .onFailure {
-                    // Error silencioso, no mostramos mensaje
-                }
-        }
-    }
-
-    fun loadComments(postId: String) {
-        viewModelScope.launch {
-            repository.getCommentsByPostId(postId)
-                .onSuccess { commentsList ->
-                    _comments.value = _comments.value.toMutableMap().apply {
-                        put(postId, commentsList)
-                    }
+                    // El listener actualizará automáticamente
                 }
                 .onFailure {
                     // Error silencioso
                 }
+        }
+    }
+
+    // Listener en tiempo real para comentarios de un post específico
+    fun loadComments(postId: String) {
+        // Si ya existe un listener para este post, no crear otro
+        if (commentListeners.containsKey(postId)) {
+            return
+        }
+
+        val listener = firestore.collection("comments")
+            .whereEqualTo("postId", postId)
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("CommunityVM", "Error listener comentarios: ${error.message}")
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val commentsList = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            doc.toObject(Comment::class.java)?.copy(id = doc.id)
+                        } catch (e: Exception) {
+                            android.util.Log.e("CommunityVM", "Error al parsear comentario: ${e.message}")
+                            null
+                        }
+                    }
+
+                    // Actualizar el mapa de comentarios
+                    _comments.value = _comments.value.toMutableMap().apply {
+                        put(postId, commentsList)
+                    }
+
+                    android.util.Log.d("CommunityVM", "Comentarios cargados para post $postId: ${commentsList.size}")
+                } else {
+                    _comments.value = _comments.value.toMutableMap().apply {
+                        put(postId, emptyList())
+                    }
+                }
+            }
+
+        commentListeners[postId] = listener
+    }
+
+    // Detener listener de comentarios cuando se cierra el post
+    fun stopListeningToComments(postId: String) {
+        commentListeners[postId]?.remove()
+        commentListeners.remove(postId)
+
+        // Limpiar los comentarios del estado
+        _comments.value = _comments.value.toMutableMap().apply {
+            remove(postId)
         }
     }
 
     fun addComment(postId: String, content: String) {
         viewModelScope.launch {
             val currentUser = auth.currentUser
-            if (currentUser == null) return@launch
+            if (currentUser == null) {
+                android.util.Log.e("CommunityVM", "Usuario no autenticado")
+                return@launch
+            }
 
-            // Obtener información del usuario desde Firestore
-            val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
-            val userName = userDoc.getString("username")?.ifEmpty { null }
-                ?: userDoc.getString("fullName")?.ifEmpty { null }
-                ?: currentUser.email?.split("@")?.firstOrNull()
-                ?: "Usuario"
-            val userAvatarUrl = userDoc.getString("avatarUrl")
+            try {
+                // Obtener información del usuario desde Firestore
+                val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
+                val userName = userDoc.getString("username")?.ifEmpty { null }
+                    ?: userDoc.getString("fullName")?.ifEmpty { null }
+                    ?: currentUser.email?.split("@")?.firstOrNull()
+                    ?: "Usuario"
+                val userAvatarUrl = userDoc.getString("avatarUrl")
 
-            repository.addComment(
-                postId = postId,
-                userId = currentUser.uid,
-                userName = userName,
-                userAvatarUrl = userAvatarUrl,
-                content = content
-            )
-                .onSuccess {
-                    loadComments(postId) // Recargar comentarios
-                    loadPosts() // Actualizar contador de comentarios
-                }
-                .onFailure {
-                    // Error silencioso
-                }
+                android.util.Log.d("CommunityVM", "Agregando comentario - Post: $postId, Usuario: $userName")
+
+                repository.addComment(
+                    postId = postId,
+                    userId = currentUser.uid,
+                    userName = userName,
+                    userAvatarUrl = userAvatarUrl,
+                    content = content
+                )
+                    .onSuccess {
+                        android.util.Log.d("CommunityVM", "Comentario agregado exitosamente")
+                        // El listener actualizará automáticamente los comentarios
+                        // No necesitamos recargar manualmente
+                    }
+                    .onFailure { error ->
+                        android.util.Log.e("CommunityVM", "Error al agregar comentario: ${error.message}")
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("CommunityVM", "Excepción al agregar comentario: ${e.message}")
+            }
         }
     }
 
@@ -160,5 +238,13 @@ class CommunityViewModel(
     fun isPostLiked(post: Post): Boolean {
         val currentUser = auth.currentUser ?: return false
         return post.likedBy.contains(currentUser.uid)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Limpiar todos los listeners
+        postsListener?.remove()
+        commentListeners.values.forEach { it.remove() }
+        commentListeners.clear()
     }
 }

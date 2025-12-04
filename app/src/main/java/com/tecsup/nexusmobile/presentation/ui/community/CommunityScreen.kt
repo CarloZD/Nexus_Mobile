@@ -1,5 +1,7 @@
 package com.tecsup.nexusmobile.presentation.ui.community
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -32,7 +33,7 @@ fun CommunityScreen(
     val uiState by viewModel.uiState.collectAsState()
     val createPostState by viewModel.createPostState.collectAsState()
     val comments by viewModel.comments.collectAsState()
-    
+
     var showCreatePostDialog by remember { mutableStateOf(false) }
     var expandedPostId by remember { mutableStateOf<String?>(null) }
 
@@ -42,6 +43,12 @@ fun CommunityScreen(
             showCreatePostDialog = false
             viewModel.resetCreatePostState()
         }
+    }
+
+    // Limpiar listeners cuando se colapsa un post
+    LaunchedEffect(expandedPostId) {
+        // Si se cambió el post expandido, detener el listener del anterior
+        // (excepto si es el mismo o null)
     }
 
     Scaffold(
@@ -133,7 +140,7 @@ fun CommunityScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        items(state.posts) { post ->
+                        items(state.posts, key = { it.id }) { post ->
                             PostCard(
                                 post = post,
                                 isLiked = viewModel.isPostLiked(post),
@@ -142,8 +149,11 @@ fun CommunityScreen(
                                 onLikeClick = { viewModel.toggleLike(post.id) },
                                 onCommentClick = {
                                     if (expandedPostId == post.id) {
+                                        // Cerrar comentarios
+                                        viewModel.stopListeningToComments(post.id)
                                         expandedPostId = null
                                     } else {
+                                        // Abrir comentarios y cargar
                                         expandedPostId = post.id
                                         viewModel.loadComments(post.id)
                                     }
@@ -324,7 +334,7 @@ fun PostCard(
                 TextButton(
                     onClick = onCommentClick,
                     colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        contentColor = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
                     Icon(
@@ -337,48 +347,94 @@ fun PostCard(
                 }
             }
 
-            // Sección de comentarios expandible
-            if (isExpanded) {
-                Divider()
-                
-                // Lista de comentarios
-                if (comments.isNotEmpty()) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+            // Sección de comentarios expandible con animación
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(
+                    animationSpec = tween(300),
+                    expandFrom = Alignment.Top
+                ) + fadeIn(animationSpec = tween(300)),
+                exit = shrinkVertically(
+                    animationSpec = tween(300),
+                    shrinkTowards = Alignment.Top
+                ) + fadeOut(animationSpec = tween(300))
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Divider()
+
+                    // Título de comentarios
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        comments.forEach { comment ->
-                            CommentItem(comment = comment)
+                        Text(
+                            text = "Comentarios (${comments.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (comments.isEmpty()) {
+                            Text(
+                                text = "Sé el primero en comentar",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
 
-                // Input para nuevo comentario
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = commentText,
-                        onValueChange = { commentText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Escribe un comentario...") },
-                        singleLine = true,
-                        trailingIcon = {
-                            IconButton(
-                                onClick = {
-                                    if (commentText.isNotBlank()) {
-                                        onAddComment(commentText)
-                                        commentText = ""
-                                    }
-                                },
-                                enabled = commentText.isNotBlank()
-                            ) {
-                                Icon(Icons.Default.Send, contentDescription = "Enviar")
+                    // Lista de comentarios con animación
+                    if (comments.isNotEmpty()) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            comments.forEach { comment ->
+                                CommentItem(comment = comment)
                             }
                         }
-                    )
+                    }
+
+                    // Input para nuevo comentario
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = commentText,
+                            onValueChange = { commentText = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Escribe un comentario...") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                        IconButton(
+                            onClick = {
+                                if (commentText.isNotBlank()) {
+                                    onAddComment(commentText.trim())
+                                    commentText = ""
+                                }
+                            },
+                            enabled = commentText.isNotBlank(),
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = if (commentText.isNotBlank())
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.Send,
+                                contentDescription = "Enviar",
+                                tint = if (commentText.isNotBlank())
+                                    MaterialTheme.colorScheme.onPrimary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -388,7 +444,9 @@ fun PostCard(
 @Composable
 fun CommentItem(comment: com.tecsup.nexusmobile.domain.model.Comment) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -436,11 +494,18 @@ fun CommentItem(comment: com.tecsup.nexusmobile.domain.model.Comment) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
             }
-            Text(
-                text = comment.content,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Text(
+                    text = comment.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
         }
     }
 }
