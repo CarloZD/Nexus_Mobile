@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +17,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,9 +38,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.tecsup.nexusmobile.R
 import com.tecsup.nexusmobile.domain.model.Game
+import com.tecsup.nexusmobile.domain.model.Post
 import com.tecsup.nexusmobile.presentation.ui.catalog.GameCard
 import com.tecsup.nexusmobile.presentation.viewmodel.CatalogViewModel
 import com.tecsup.nexusmobile.presentation.viewmodel.CatalogUiState
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,17 +54,27 @@ fun HomeScreen(
     onNavigateToChatbot: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val randomPost by viewModel.randomPost.collectAsState()
+
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Cambiar el post aleatorio cada 30 segundos
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30000) // 30 segundos
+            viewModel.refreshRandomPost()
+        }
+    }
 
     // Filtrar juegos según la búsqueda Y categoría
     val filteredGames = remember(uiState, searchQuery, selectedCategory) {
         when (val state = uiState) {
             is CatalogUiState.Success -> {
                 var games = state.games
-                
+
                 // Filtrar por búsqueda
                 if (searchQuery.isNotBlank()) {
                     games = games.filter { game ->
@@ -66,20 +83,17 @@ fun HomeScreen(
                                 game.developer.contains(searchQuery, ignoreCase = true)
                     }
                 }
-                
+
                 // Filtrar por categoría
                 selectedCategory?.let { category ->
-                    // Convertir la categoría seleccionada (español) a inglés (BD)
                     val categoryInDb = categoryMapReverse[category] ?: category.uppercase()
                     Log.d("HomeScreen", "Filtrando por categoría: '$category' -> BD: '$categoryInDb'")
-                    
+
                     games = games.filter { game ->
                         val gameCategory = game.category.uppercase().trim()
-                        // Comparar directamente o a través del mapeo
                         val matches = gameCategory.equals(categoryInDb.uppercase().trim(), ignoreCase = true) ||
-                                // También verificar si la categoría del juego mapeada coincide
                                 (categoryMap[gameCategory] == category)
-                        
+
                         if (matches) {
                             Log.d("HomeScreen", "✓ Juego '${game.title}' coincide - Categoría BD: '$gameCategory'")
                         }
@@ -87,7 +101,7 @@ fun HomeScreen(
                     }
                     Log.d("HomeScreen", "Total juegos filtrados encontrados: ${games.size}")
                 }
-                
+
                 games
             }
             else -> emptyList()
@@ -99,7 +113,6 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     if (isSearchActive) {
-                        // Campo de búsqueda
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
@@ -131,7 +144,6 @@ fun HomeScreen(
                             )
                         )
                     } else {
-                        // Logo y título normal
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
@@ -188,26 +200,7 @@ fun HomeScreen(
             }
 
             is CatalogUiState.Success -> {
-                // Debug: Verificar cuántos juegos hay y sus categorías
-                LaunchedEffect(state.games.size, selectedCategory, searchQuery) {
-                    Log.d("HomeScreen", "Total juegos cargados: ${state.games.size}")
-                    Log.d("HomeScreen", "Juegos filtrados: ${filteredGames.size}")
-                    Log.d("HomeScreen", "Categoría seleccionada: $selectedCategory")
-                    Log.d("HomeScreen", "Búsqueda activa: $isSearchActive, Query: $searchQuery")
-                    
-                    // Mostrar todas las categorías únicas de los juegos
-                    val uniqueCategories = state.games.map { it.category.uppercase().trim() }.distinct().sorted()
-                    Log.d("HomeScreen", "Categorías únicas en juegos: $uniqueCategories")
-                    
-                    if (state.games.isNotEmpty()) {
-                        state.games.take(5).forEach { game ->
-                            Log.d("HomeScreen", "Juego: ${game.title}, Categoría BD: '${game.category}'")
-                        }
-                    }
-                }
-                
                 if (isSearchActive && searchQuery.isNotEmpty()) {
-                    // Vista de resultados de búsqueda
                     SearchResultsView(
                         games = filteredGames,
                         searchQuery = searchQuery,
@@ -215,7 +208,6 @@ fun HomeScreen(
                         modifier = Modifier.padding(padding)
                     )
                 } else {
-                    // Vista normal del Home
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
@@ -232,10 +224,9 @@ fun HomeScreen(
                             )
                         }
 
-                        // Categorías con funcionalidad
+                        // Categorías
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
-                            // Mostrar todas las categorías posibles de la BD
                             CategoryChips(
                                 selectedCategory = selectedCategory,
                                 onCategorySelected = { category ->
@@ -244,7 +235,7 @@ fun HomeScreen(
                             )
                         }
 
-                        // Mostrar indicador de filtro activo
+                        // Indicador de filtro activo
                         if (selectedCategory != null) {
                             item {
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -274,9 +265,9 @@ fun HomeScreen(
                         item {
                             Spacer(modifier = Modifier.height(24.dp))
                             Text(
-                                text = if (selectedCategory != null) 
+                                text = if (selectedCategory != null)
                                     "JUEGOS DE ${selectedCategory?.uppercase()}"
-                                else 
+                                else
                                     "OFERTAS ESPECIALES",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
@@ -285,7 +276,7 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                         }
 
-                        // Si hay categoría seleccionada, mostrar juegos en vertical
+                        // Juegos filtrados o sin filtro
                         if (selectedCategory != null) {
                             item {
                                 if (filteredGames.isEmpty()) {
@@ -312,7 +303,6 @@ fun HomeScreen(
                                         }
                                     }
                                 } else {
-                                    // Mostrar juegos filtrados en vertical
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -329,7 +319,6 @@ fun HomeScreen(
                                 }
                             }
                         } else {
-                            // Sin filtro: mostrar ofertas especiales en horizontal
                             item {
                                 if (state.games.isEmpty()) {
                                     Box(
@@ -370,12 +359,12 @@ fun HomeScreen(
                             }
                         }
 
-                        // Noticias solo si no hay filtro activo
+                        // POST ALEATORIO DE LA COMUNIDAD (solo si no hay filtro activo)
                         if (selectedCategory == null) {
                             item {
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
-                                    text = "NOTICIAS Y ACTUALIZACIONES",
+                                    text = "DESTACADO DE LA COMUNIDAD",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -384,7 +373,42 @@ fun HomeScreen(
                             }
 
                             item {
-                                NewsSection()
+                                randomPost?.let { post ->
+                                    CommunityPostCard(
+                                        post = post,
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    )
+                                } ?: run {
+                                    // Mostrar placeholder si no hay posts
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(24.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "📰",
+                                                    style = MaterialTheme.typography.displayMedium
+                                                )
+                                                Text(
+                                                    text = "No hay posts en la comunidad",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                                 Spacer(modifier = Modifier.height(16.dp))
                             }
                         }
@@ -424,6 +448,145 @@ fun HomeScreen(
         }
     }
 }
+
+@Composable
+fun CommunityPostCard(
+    post: Post,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header con usuario
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Avatar
+                Surface(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        if (post.userAvatarUrl != null && post.userAvatarUrl.isNotEmpty()) {
+                            AsyncImage(
+                                model = post.userAvatarUrl,
+                                contentDescription = "Avatar",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Avatar",
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = post.userName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = formatDate(post.createdAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Divider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+
+            // Título
+            Text(
+                text = post.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+
+            // Contenido (limitado a 3 líneas)
+            Text(
+                text = post.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Estadísticas
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = if (post.likesCount > 0) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Likes",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (post.likesCount > 0)
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "${post.likesCount}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "💬",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "${post.commentsCount}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatDate(timestamp: Long): String {
+    val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    return sdf.format(Date(timestamp))
+}
+
+// Resto de funciones existentes (SearchResultsView, SearchGameCard, FeaturedBanner, etc.)
+// ... (mantener todas las funciones existentes)
 
 @Composable
 fun SearchResultsView(
@@ -502,7 +665,6 @@ fun SearchGameCard(
         Row(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Imagen
             AsyncImage(
                 model = game.headerImage ?: game.backgroundImage,
                 contentDescription = game.title,
@@ -512,7 +674,6 @@ fun SearchGameCard(
                 contentScale = ContentScale.Crop
             )
 
-            // Información
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -587,7 +748,6 @@ fun FeaturedBanner(
         shape = RoundedCornerShape(16.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Imagen de fondo
             AsyncImage(
                 model = game.headerImage ?: game.backgroundImage,
                 contentDescription = game.title,
@@ -595,7 +755,6 @@ fun FeaturedBanner(
                 contentScale = ContentScale.Crop
             )
 
-            // Gradiente oscuro
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -609,7 +768,6 @@ fun FeaturedBanner(
                     )
             )
 
-            // Contenido
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -653,7 +811,6 @@ fun FeaturedBanner(
     }
 }
 
-// Mapeo de categorías de BD (inglés) a español para la UI
 private val categoryMap = mapOf(
     "ACTION" to "ACCIÓN",
     "ADVENTURE" to "AVENTURA",
@@ -667,7 +824,6 @@ private val categoryMap = mapOf(
     "INDIE" to "INDIE"
 )
 
-// Mapeo inverso: español a inglés (BD)
 private val categoryMapReverse = categoryMap.entries.associate { (k, v) -> v to k }
 
 @Composable
@@ -676,7 +832,6 @@ fun CategoryChips(
     onCategorySelected: (String) -> Unit,
     availableCategories: List<String> = emptyList()
 ) {
-    // Mostrar todas las categorías posibles de la BD en español
     val categories = categoryMap.values.toList()
 
     LazyRow(
@@ -691,9 +846,9 @@ fun CategoryChips(
                     Text(
                         text = category,
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (selectedCategory == category) 
-                            FontWeight.Bold 
-                        else 
+                        fontWeight = if (selectedCategory == category)
+                            FontWeight.Bold
+                        else
                             FontWeight.Normal
                     )
                 },
@@ -739,7 +894,6 @@ fun VerticalGameCard(
         Row(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Imagen del juego
             AsyncImage(
                 model = game.headerImage ?: game.backgroundImage,
                 contentDescription = game.title,
@@ -749,7 +903,6 @@ fun VerticalGameCard(
                 contentScale = ContentScale.Crop
             )
 
-            // Información del juego
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -804,55 +957,6 @@ fun VerticalGameCard(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun NewsSection() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.size(60.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Text(
-                        text = "📰",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = "Últimas noticias de la comunidad",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Descubre las últimas actualizaciones",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
