@@ -142,8 +142,11 @@ class CommunityViewModel(
     fun loadComments(postId: String) {
         // Si ya existe un listener para este post, no crear otro
         if (commentListeners.containsKey(postId)) {
+            android.util.Log.d("CommunityVM", "Listener ya existe para post $postId")
             return
         }
+
+        android.util.Log.d("CommunityVM", "Creando listener para post $postId")
 
         val listener = firestore.collection("comments")
             .whereEqualTo("postId", postId)
@@ -151,33 +154,54 @@ class CommunityViewModel(
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     android.util.Log.e("CommunityVM", "Error listener comentarios: ${error.message}")
+                    android.util.Log.e("CommunityVM", "Error completo: ", error)
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null) {
+                    android.util.Log.d("CommunityVM", "Snapshot recibido - Total documentos: ${snapshot.documents.size}")
+
                     val commentsList = snapshot.documents.mapNotNull { doc ->
                         try {
+                            android.util.Log.d("CommunityVM", "Procesando doc ${doc.id}: ${doc.data}")
+
+                            // Obtener los datos manualmente para debug
+                            val postIdField = doc.getString("postId")
+                            val userIdField = doc.getString("userId")
+                            val userNameField = doc.getString("userName")
+                            val contentField = doc.getString("content")
+
+                            android.util.Log.d("CommunityVM", "Campos - postId: $postIdField, userId: $userIdField, userName: $userNameField, content: $contentField")
+
                             doc.toObject(Comment::class.java)?.copy(id = doc.id)
                         } catch (e: Exception) {
-                            android.util.Log.e("CommunityVM", "Error al parsear comentario: ${e.message}")
+                            android.util.Log.e("CommunityVM", "Error al parsear comentario ${doc.id}: ${e.message}")
+                            android.util.Log.e("CommunityVM", "Stack trace: ", e)
                             null
                         }
                     }
 
-                    // Actualizar el mapa de comentarios
-                    _comments.value = _comments.value.toMutableMap().apply {
-                        put(postId, commentsList)
+                    android.util.Log.d("CommunityVM", "Comentarios parseados exitosamente: ${commentsList.size}")
+                    commentsList.forEach { comment ->
+                        android.util.Log.d("CommunityVM", "Comentario: ${comment.userName} - ${comment.content}")
                     }
 
-                    android.util.Log.d("CommunityVM", "Comentarios cargados para post $postId: ${commentsList.size}")
+                    // Actualizar el mapa de comentarios de forma inmutable
+                    val currentComments = _comments.value.toMutableMap()
+                    currentComments[postId] = commentsList
+                    _comments.value = currentComments
+
+                    android.util.Log.d("CommunityVM", "Estado actualizado - Total comentarios en mapa: ${_comments.value[postId]?.size}")
                 } else {
-                    _comments.value = _comments.value.toMutableMap().apply {
-                        put(postId, emptyList())
-                    }
+                    android.util.Log.d("CommunityVM", "Snapshot es null para post $postId")
+                    val currentComments = _comments.value.toMutableMap()
+                    currentComments[postId] = emptyList()
+                    _comments.value = currentComments
                 }
             }
 
         commentListeners[postId] = listener
+        android.util.Log.d("CommunityVM", "Listener registrado para post $postId")
     }
 
     // Detener listener de comentarios cuando se cierra el post
