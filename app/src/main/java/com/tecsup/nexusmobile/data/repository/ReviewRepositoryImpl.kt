@@ -19,7 +19,9 @@ class ReviewRepositoryImpl : ReviewRepository {
             if (gameId.isEmpty()) {
                 return Result.success(emptyList())
             }
-            // Primero filtramos por gameId, luego ordenamos en memoria para evitar necesidad de índice
+
+            android.util.Log.d("ReviewRepository", "Buscando reviews para gameId: $gameId")
+
             val snapshot = try {
                 reviewsCollection
                     .whereEqualTo("gameId", gameId)
@@ -30,30 +32,65 @@ class ReviewRepositoryImpl : ReviewRepository {
                 return Result.success(emptyList())
             }
 
+            android.util.Log.d("ReviewRepository", "Reviews encontradas: ${snapshot.documents.size}")
+
             val reviewsWithTimestamp = snapshot.documents.mapNotNull { doc ->
                 try {
-                    // Mapeo manual para evitar problemas con tipos o campos faltantes
+                    // Obtener valores con manejo seguro de nulls y tipos
                     val docGameId = doc.getString("gameId") ?: ""
                     val userId = doc.getString("userId") ?: ""
                     val userName = doc.getString("userName") ?: "Usuario"
-                    
-                    // Manejar rating que puede ser Long o Int
-                    val ratingValue = when {
-                        doc.get("rating") is Long -> (doc.get("rating") as Long).toInt()
-                        doc.get("rating") is Number -> (doc.get("rating") as Number).toInt()
-                        else -> 0
+
+                    // Manejar rating que puede ser Long, Int, o Double
+                    val ratingValue = try {
+                        when (val rating = doc.get("rating")) {
+                            is Long -> rating.toInt()
+                            is Int -> rating
+                            is Double -> rating.toInt()
+                            is Number -> rating.toInt()
+                            else -> {
+                                android.util.Log.w("ReviewRepository", "Rating desconocido para doc ${doc.id}: $rating")
+                                0
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("ReviewRepository", "Error al convertir rating: ${e.message}")
+                        0
                     }
-                    
+
                     val comment = doc.getString("comment") ?: ""
-                    val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
+
+                    // Obtener timestamp - puede venir como Long o como Timestamp
+                    val timestamp = try {
+                        when (val ts = doc.get("timestamp")) {
+                            is Long -> ts
+                            is Number -> ts.toLong()
+                            else -> {
+                                // Si no hay timestamp, intentar obtener de createdAt
+                                when (val createdAt = doc.get("createdAt")) {
+                                    is com.google.firebase.Timestamp -> createdAt.toDate().time
+                                    is Long -> createdAt
+                                    is Number -> createdAt.toLong()
+                                    else -> {
+                                        android.util.Log.w("ReviewRepository", "Timestamp no encontrado para doc ${doc.id}")
+                                        System.currentTimeMillis()
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("ReviewRepository", "Error al obtener timestamp: ${e.message}")
+                        System.currentTimeMillis()
+                    }
+
+                    // Obtener fecha formateada
                     val dateString = doc.getString("date") ?: ""
-                    
                     val formattedDate = if (dateString.isEmpty()) {
                         dateFormat.format(Date(timestamp))
                     } else {
                         dateString
                     }
-                    
+
                     val review = Review(
                         id = doc.id,
                         gameId = docGameId,
@@ -63,19 +100,26 @@ class ReviewRepositoryImpl : ReviewRepository {
                         comment = comment,
                         date = formattedDate
                     )
-                    
+
+                    android.util.Log.d("ReviewRepository", "Review mapeada: ${review.userName} - Rating: ${review.rating}")
+
                     Pair(review, timestamp)
                 } catch (e: Exception) {
                     android.util.Log.e("ReviewRepository", "Error al mapear documento ${doc.id}: ${e.message}", e)
+                    android.util.Log.e("ReviewRepository", "Datos del documento: ${doc.data}")
                     null
                 }
             }
+
             // Ordenar por timestamp descendente (más recientes primero)
             val sortedReviews = reviewsWithTimestamp
                 .sortedByDescending { it.second }
                 .map { it.first }
+
+            android.util.Log.d("ReviewRepository", "Reviews finales ordenadas: ${sortedReviews.size}")
             Result.success(sortedReviews)
         } catch (e: Exception) {
+            android.util.Log.e("ReviewRepository", "Error general: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -91,7 +135,9 @@ class ReviewRepositoryImpl : ReviewRepository {
                 .get()
                 .await()
 
-            val username = userDoc.getString("username") ?: userDoc.getString("fullName") ?: "Usuario"
+            val username = userDoc.getString("username")?.takeIf { it.isNotEmpty() }
+                ?: userDoc.getString("fullName")?.takeIf { it.isNotEmpty() }
+                ?: "Usuario"
 
             val currentTime = System.currentTimeMillis()
             val reviewToSave = review.copy(
@@ -108,16 +154,21 @@ class ReviewRepositoryImpl : ReviewRepository {
                 "rating" to reviewToSave.rating,
                 "comment" to reviewToSave.comment,
                 "date" to reviewToSave.date,
-                "timestamp" to currentTime
+                "timestamp" to currentTime,
+                "createdAt" to com.google.firebase.Timestamp.now()
             )
+
+            android.util.Log.d("ReviewRepository", "Guardando review: $reviewMap")
 
             val docRef = reviewsCollection.add(reviewMap).await()
             val savedReview = reviewToSave.copy(id = docRef.id)
 
+            android.util.Log.d("ReviewRepository", "Review guardada exitosamente con ID: ${docRef.id}")
+
             Result.success(savedReview)
         } catch (e: Exception) {
+            android.util.Log.e("ReviewRepository", "Error al guardar review: ${e.message}", e)
             Result.failure(e)
         }
     }
 }
-

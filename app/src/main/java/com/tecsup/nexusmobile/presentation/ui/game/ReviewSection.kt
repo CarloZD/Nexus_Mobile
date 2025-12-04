@@ -1,8 +1,6 @@
 package com.tecsup.nexusmobile.presentation.ui.game
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,9 +23,7 @@ fun ReviewSection(
     isLoadingReview: Boolean = false
 ) {
     var showAddReviewDialog by remember { mutableStateOf(false) }
-    var commentText by remember { mutableStateOf("") }
-    var selectedRating by remember { mutableStateOf(0) }
-    var isLoading by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -96,98 +92,106 @@ fun ReviewSection(
                 }
             }
         } else {
-            LazyColumn(
+            // CAMBIO IMPORTANTE: Usar Column en lugar de LazyColumn
+            // porque ya estamos dentro de un scroll (GameDetailScreen)
+            Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(reviews) { review ->
+                reviews.forEach { review ->
                     ReviewCard(review = review)
                 }
             }
         }
     }
-    
+
     // Diálogo para agregar reseña
     if (showAddReviewDialog) {
-        AlertDialog(
-            onDismissRequest = {
+        AddReviewDialog(
+            onDismiss = { showAddReviewDialog = false },
+            onAddReview = { comment, rating ->
+                onAddReview(comment, rating)
                 showAddReviewDialog = false
-                commentText = ""
-                selectedRating = 0
             },
-            title = { Text("Agregar Reseña") },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Selector de rating
-                    Text(
-                        text = "Calificación:",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        repeat(5) { index ->
-                            TextButton(
-                                onClick = { selectedRating = index + 1 }
-                            ) {
-                                Text(
-                                    text = if (index < selectedRating) "★" else "☆",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = if (index < selectedRating)
-                                        MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                                )
-                            }
-                        }
-                    }
-                    
-                    // Campo de comentario
-                    OutlinedTextField(
-                        value = commentText,
-                        onValueChange = { commentText = it },
-                        label = { Text("Tu comentario") },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 4,
-                        minLines = 3
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (commentText.isNotBlank() && selectedRating > 0 && !isLoadingReview) {
-                            onAddReview(commentText, selectedRating)
-                            showAddReviewDialog = false
-                            commentText = ""
-                            selectedRating = 0
-                        }
-                    },
-                    enabled = commentText.isNotBlank() && selectedRating > 0 && !isLoadingReview
-                ) {
-                    if (isLoadingReview) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Text("Publicar")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showAddReviewDialog = false
-                        commentText = ""
-                        selectedRating = 0
-                    }
-                ) {
-                    Text("Cancelar")
-                }
-            }
+            isLoading = isLoadingReview
         )
     }
+}
+
+@Composable
+private fun AddReviewDialog(
+    onDismiss: () -> Unit,
+    onAddReview: (String, Int) -> Unit,
+    isLoading: Boolean
+) {
+    var commentText by remember { mutableStateOf("") }
+    var selectedRating by remember { mutableStateOf(0) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Agregar Reseña") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Selector de rating
+                Text(
+                    text = "Calificación:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    repeat(5) { index ->
+                        IconButton(
+                            onClick = { selectedRating = index + 1 }
+                        ) {
+                            Text(
+                                text = if (index < selectedRating) "★" else "☆",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = if (index < selectedRating)
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            )
+                        }
+                    }
+                }
+
+                // Campo de comentario
+                OutlinedTextField(
+                    value = commentText,
+                    onValueChange = { commentText = it },
+                    label = { Text("Tu comentario") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4,
+                    minLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (commentText.isNotBlank() && selectedRating > 0) {
+                        onAddReview(commentText, selectedRating)
+                    }
+                },
+                enabled = commentText.isNotBlank() && selectedRating > 0 && !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Publicar")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
+    )
 }
 
 @Composable
