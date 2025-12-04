@@ -3,6 +3,8 @@ package com.tecsup.nexusmobile.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.tecsup.nexusmobile.data.repository.CartRepositoryImpl
 import com.tecsup.nexusmobile.domain.model.Cart
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,12 +21,48 @@ class CartViewModel(
     private val repository: CartRepositoryImpl = CartRepositoryImpl()
 ) : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
+    private val firestore = FirebaseFirestore.getInstance()
 
     private val _uiState = MutableStateFlow<CartUiState>(CartUiState.Loading)
     val uiState: StateFlow<CartUiState> = _uiState
 
+    private var cartListener: ListenerRegistration? = null
+
     init {
-        loadCart()
+        setupRealtimeCartListener()
+    }
+
+    // Escuchar cambios en tiempo real del carrito
+    private fun setupRealtimeCartListener() {
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            _uiState.value = CartUiState.Error("Usuario no autenticado")
+            return
+        }
+
+        _uiState.value = CartUiState.Loading
+
+        // Listener en tiempo real de Firestore
+        cartListener = firestore.collection("carts")
+            .document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    _uiState.value = CartUiState.Error(
+                        error.message ?: "Error al cargar el carrito"
+                    )
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null && snapshot.exists()) {
+                    val cart = snapshot.toObject(Cart::class.java)?.copy(userId = userId)
+                        ?: Cart(userId = userId, items = emptyList(), total = 0.0)
+                    _uiState.value = CartUiState.Success(cart)
+                } else {
+                    // Si no existe el carrito, crear uno vacío
+                    val emptyCart = Cart(userId = userId, items = emptyList(), total = 0.0)
+                    _uiState.value = CartUiState.Success(emptyCart)
+                }
+            }
     }
 
     fun loadCart() {
@@ -54,10 +92,12 @@ class CartViewModel(
 
             repository.addToCart(userId, gameId, gameTitle, gameImage, price)
                 .onSuccess {
-                    loadCart() // Recargar carrito
+                    // No necesitamos recargar manualmente, el listener se encarga
                 }
-                .onFailure {
-                    // Error silencioso o mostrar mensaje
+                .onFailure { error ->
+                    _uiState.value = CartUiState.Error(
+                        error.message ?: "Error al agregar al carrito"
+                    )
                 }
         }
     }
@@ -68,10 +108,12 @@ class CartViewModel(
 
             repository.removeFromCart(userId, gameId)
                 .onSuccess {
-                    loadCart()
+                    // El listener actualizará automáticamente
                 }
-                .onFailure {
-                    // Error silencioso
+                .onFailure { error ->
+                    _uiState.value = CartUiState.Error(
+                        error.message ?: "Error al eliminar del carrito"
+                    )
                 }
         }
     }
@@ -82,10 +124,12 @@ class CartViewModel(
 
             repository.updateQuantity(userId, gameId, quantity)
                 .onSuccess {
-                    loadCart()
+                    // El listener actualizará automáticamente
                 }
-                .onFailure {
-                    // Error silencioso
+                .onFailure { error ->
+                    _uiState.value = CartUiState.Error(
+                        error.message ?: "Error al actualizar cantidad"
+                    )
                 }
         }
     }
@@ -96,11 +140,19 @@ class CartViewModel(
 
             repository.clearCart(userId)
                 .onSuccess {
-                    loadCart()
+                    // El listener actualizará automáticamente
                 }
-                .onFailure {
-                    // Error silencioso
+                .onFailure { error ->
+                    _uiState.value = CartUiState.Error(
+                        error.message ?: "Error al limpiar carrito"
+                    )
                 }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Limpiar el listener cuando el ViewModel se destruye
+        cartListener?.remove()
     }
 }

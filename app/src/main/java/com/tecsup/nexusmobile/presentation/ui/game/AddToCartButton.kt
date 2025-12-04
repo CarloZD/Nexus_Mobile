@@ -1,5 +1,11 @@
 package com.tecsup.nexusmobile.presentation.ui.game
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -14,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tecsup.nexusmobile.domain.model.Game
 import com.tecsup.nexusmobile.presentation.viewmodel.CartViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun AddToCartButton(
@@ -26,6 +33,7 @@ fun AddToCartButton(
     var isAdding by remember { mutableStateOf(false) }
     var showSuccess by remember { mutableStateOf(false) }
 
+    // Animación de éxito
     LaunchedEffect(showSuccess) {
         if (showSuccess) {
             delay(2000)
@@ -35,7 +43,7 @@ fun AddToCartButton(
 
     Button(
         onClick = {
-            if (!showSuccess) {
+            if (!showSuccess && !isAdding) {
                 isAdding = true
                 cartViewModel.addToCart(
                     gameId = game.id,
@@ -43,20 +51,24 @@ fun AddToCartButton(
                     gameImage = game.headerImage,
                     price = game.price
                 )
-                isAdding = false
-                showSuccess = true
-                onAddToCart()
+                // Simular pequeño delay para el feedback visual
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    delay(500)
+                    isAdding = false
+                    showSuccess = true
+                    onAddToCart()
+                }
             }
         },
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp),
-        enabled = enabled && game.stock > 0 && !game.isFree && !isAdding,
+        enabled = enabled && game.stock > 0 && !game.isFree && !isAdding && !showSuccess,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (showSuccess)
-                MaterialTheme.colorScheme.tertiary
-            else
-                MaterialTheme.colorScheme.primary
+            containerColor = when {
+                showSuccess -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.primary
+            }
         )
     ) {
         Row(
@@ -75,13 +87,28 @@ fun AddToCartButton(
                     Text("Agregando...")
                 }
                 showSuccess -> {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("¡Agregado al Carrito!")
+                    AnimatedVisibility(
+                        visible = showSuccess,
+                        enter = scaleIn() + fadeIn(),
+                        exit = scaleOut() + fadeOut()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "¡Agregado!",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
                 game.isFree -> {
                     Text("Juego Gratis")

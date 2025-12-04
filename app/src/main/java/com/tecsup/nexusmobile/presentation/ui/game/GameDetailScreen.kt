@@ -5,7 +5,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +16,7 @@ import com.tecsup.nexusmobile.presentation.viewmodel.CartViewModel
 import com.tecsup.nexusmobile.presentation.viewmodel.GameDetailUiState
 import com.tecsup.nexusmobile.presentation.viewmodel.GameDetailViewModel
 import com.tecsup.nexusmobile.presentation.viewmodel.ReviewViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,13 +28,13 @@ fun GameDetailScreen(
     onAddToCart: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showAddedToCartSnackbar by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    
+    val coroutineScope = rememberCoroutineScope()
+
     val reviewViewModel: ReviewViewModel = viewModel()
     val reviewState by reviewViewModel.uiState.collectAsState()
     val addReviewState by reviewViewModel.addReviewState.collectAsState()
-    
+
     var hasNavigatedOnSuccess by remember { mutableStateOf(false) }
 
     LaunchedEffect(gameId) {
@@ -51,7 +51,7 @@ fun GameDetailScreen(
             }
         }
     }
-    
+
     LaunchedEffect(addReviewState) {
         if (addReviewState is com.tecsup.nexusmobile.presentation.viewmodel.AddReviewUiState.Success && !hasNavigatedOnSuccess) {
             hasNavigatedOnSuccess = true
@@ -63,18 +63,36 @@ fun GameDetailScreen(
         }
     }
 
-    LaunchedEffect(showAddedToCartSnackbar) {
-        if (showAddedToCartSnackbar) {
-            snackbarHostState.showSnackbar(
-                message = "¡Juego agregado al carrito!",
-                duration = SnackbarDuration.Short
-            )
-            showAddedToCartSnackbar = false
-        }
-    }
-
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                snackbar = { data ->
+                    Snackbar(
+                        modifier = Modifier.padding(16.dp),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = data.visuals.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            )
+        },
         bottomBar = {
             when (val state = uiState) {
                 is GameDetailUiState.Success -> {
@@ -91,49 +109,20 @@ fun GameDetailScreen(
                         ) {
                             // Solo mostrar botón de agregar al carrito si el juego NO está en la biblioteca
                             if (!state.isInLibrary) {
-                                Button(
-                                    onClick = {
-                                        cartViewModel.addToCart(
-                                            gameId = state.game.id,
-                                            gameTitle = state.game.title,
-                                            gameImage = state.game.headerImage ?: state.game.backgroundImage,
-                                            price = state.game.price
-                                        )
-                                        showAddedToCartSnackbar = true
+                                AddToCartButton(
+                                    game = state.game,
+                                    onAddToCart = {
+                                        // Lanzar coroutine para mostrar el snackbar
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                message = "\"${state.game.title}\" agregado al carrito",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        }
                                         onAddToCart(state.game.id)
                                     },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(56.dp),
-                                    enabled = state.game.stock > 0 && !state.game.isFree,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    )
-                                ) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Icon(
-                                            imageVector = androidx.compose.material.icons.Icons.Default.ShoppingCart,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = if (state.game.isFree) {
-                                                "Juego Gratis"
-                                            } else if (state.game.stock <= 0) {
-                                                "Sin Stock"
-                                            } else {
-                                                "Agregar al Carrito - S/${state.game.price}"
-                                            },
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                        )
-                                    }
-                                }
+                                    cartViewModel = cartViewModel
+                                )
                             } else {
                                 // Mostrar mensaje si el juego ya está en la biblioteca
                                 Card(
