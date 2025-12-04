@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,7 +41,8 @@ import com.tecsup.nexusmobile.presentation.viewmodel.CatalogUiState
 fun HomeScreen(
     viewModel: CatalogViewModel = viewModel(),
     onNavigateToCart: () -> Unit,
-    onNavigateToGameDetail: (String) -> Unit
+    onNavigateToGameDetail: (String) -> Unit,
+    onNavigateToChatbot: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
@@ -132,6 +134,9 @@ fun HomeScreen(
                             imageVector = if (isSearchActive) Icons.Default.Close else Icons.Default.Search,
                             contentDescription = if (isSearchActive) "Cerrar búsqueda" else "Buscar"
                         )
+                    }
+                    IconButton(onClick = onNavigateToChatbot) {
+                        Icon(Icons.Default.ChatBubble, contentDescription = "Chatbot")
                     }
                     IconButton(onClick = onNavigateToCart) {
                         Icon(Icons.Default.ShoppingCart, contentDescription = "Carrito")

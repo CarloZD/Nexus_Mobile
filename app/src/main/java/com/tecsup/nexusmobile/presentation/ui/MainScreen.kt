@@ -22,6 +22,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.tecsup.nexusmobile.presentation.ui.cart.CartScreen
+import com.tecsup.nexusmobile.presentation.ui.chatbot.ChatbotScreen
 import com.tecsup.nexusmobile.presentation.ui.checkout.CheckoutScreen
 import com.tecsup.nexusmobile.presentation.ui.community.CommunityScreen
 import com.tecsup.nexusmobile.presentation.ui.game.GameDetailScreen
@@ -55,6 +56,10 @@ object CheckoutRoute {
 
 object EditProfileRoute {
     const val route = "edit_profile"
+}
+
+object ChatbotRoute {
+    const val route = "chatbot"
 }
 
 object AboutRoute {
@@ -149,6 +154,9 @@ fun MainScreen(
                     },
                     onNavigateToGameDetail = { gameId ->
                         navController.navigate(GameDetailRoute.createRoute(gameId))
+                    },
+                    onNavigateToChatbot = {
+                        navController.navigate(ChatbotRoute.route)
                     }
                 )
             }
@@ -163,6 +171,14 @@ fun MainScreen(
 
             composable(BottomNavScreen.Community.route) {
                 CommunityScreen()
+            }
+
+            composable(ChatbotRoute.route) {
+                ChatbotScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
             }
 
             composable(BottomNavScreen.Profile.route) {
