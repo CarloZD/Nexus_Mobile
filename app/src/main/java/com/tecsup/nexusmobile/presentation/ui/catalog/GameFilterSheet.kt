@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -21,6 +22,20 @@ data class FilterState(
     val onlyFeatured: Boolean = false
 )
 
+// Mapeo de categorías de BD (inglés) a español para la UI (mismo que HomeScreen)
+private val categoryMap = mapOf(
+    "ACTION" to "ACCIÓN",
+    "ADVENTURE" to "AVENTURA",
+    "RPG" to "RPG",
+    "STRATEGY" to "ESTRATEGIA",
+    "SPORTS" to "DEPORTES",
+    "SIMULATION" to "SIMULACIÓN",
+    "RACING" to "CARRERAS",
+    "PUZZLE" to "PUZZLE",
+    "HORROR" to "TERROR",
+    "INDIE" to "INDIE"
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GameFilterSheet(
@@ -32,6 +47,15 @@ fun GameFilterSheet(
     availablePlatforms: List<String> = emptyList(),
     modifier: Modifier = Modifier
 ) {
+    val categoriesInSpanish = remember(availableCategories) {
+        if (availableCategories.isEmpty()) {
+            categoryMap.values.toList().sorted()
+        } else {
+            availableCategories.mapNotNull { categoryMap[it.uppercase()] }
+                .distinct()
+                .sorted()
+        }
+    }
     if (isVisible) {
         ModalBottomSheet(
             onDismissRequest = onDismiss,
@@ -66,7 +90,7 @@ fun GameFilterSheet(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Categorías
-                    if (availableCategories.isNotEmpty()) {
+                    if (categoriesInSpanish.isNotEmpty()) {
                         item {
                             Column {
                                 Text(
@@ -87,15 +111,15 @@ fun GameFilterSheet(
                                         },
                                         label = { Text("Todas") }
                                     )
-                                    availableCategories.forEach { category ->
+                                    categoriesInSpanish.forEach { categorySpanish ->
                                         FilterChip(
-                                            selected = filterState.selectedCategory == category,
+                                            selected = filterState.selectedCategory == categorySpanish,
                                             onClick = {
                                                 onFilterChange(
-                                                    filterState.copy(selectedCategory = category)
+                                                    filterState.copy(selectedCategory = categorySpanish)
                                                 )
                                             },
-                                            label = { Text(category) }
+                                            label = { Text(categorySpanish) }
                                         )
                                     }
                                 }

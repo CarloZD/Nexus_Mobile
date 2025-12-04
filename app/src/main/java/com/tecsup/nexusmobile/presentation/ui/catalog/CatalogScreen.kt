@@ -51,14 +51,36 @@ fun CatalogScreen(
         }
     }
 
+    // Mapeo de categorías (mismo que en HomeScreen)
+    val categoryMapReverse = mapOf(
+        "ACCIÓN" to "ACTION",
+        "AVENTURA" to "ADVENTURE",
+        "RPG" to "RPG",
+        "ESTRATEGIA" to "STRATEGY",
+        "DEPORTES" to "SPORTS",
+        "SIMULACIÓN" to "SIMULATION",
+        "CARRERAS" to "RACING",
+        "PUZZLE" to "PUZZLE",
+        "TERROR" to "HORROR",
+        "INDIE" to "INDIE"
+    )
+
     // Filtrar juegos según el estado del filtro
     val filteredGames = remember(uiState, filterState) {
         val currentState = uiState
         when (currentState) {
             is CatalogUiState.Success -> {
                 currentState.games.filter { game ->
-                    (filterState.selectedCategory == null || game.category == filterState.selectedCategory) &&
-                    (filterState.selectedPlatform == null || game.platform == filterState.selectedPlatform) &&
+                    // Filtrar por categoría (con mapeo español/inglés)
+                    val categoryMatch = filterState.selectedCategory?.let { selectedCat ->
+                        // Convertir categoría seleccionada (puede estar en español o inglés) a inglés (BD)
+                        val categoryInDb = categoryMapReverse[selectedCat.uppercase()] 
+                            ?: selectedCat.uppercase()
+                        game.category.uppercase().trim().equals(categoryInDb.trim(), ignoreCase = true)
+                    } ?: true
+                    
+                    categoryMatch &&
+                    (filterState.selectedPlatform == null || game.platform.equals(filterState.selectedPlatform, ignoreCase = true)) &&
                     (!filterState.onlyFree || game.isFree) &&
                     (!filterState.onlyFeatured || game.featured)
                 }

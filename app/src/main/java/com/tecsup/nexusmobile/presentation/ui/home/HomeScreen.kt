@@ -1,5 +1,6 @@
 package com.tecsup.nexusmobile.presentation.ui.home
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,6 +28,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -47,21 +49,46 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Filtrar juegos según la búsqueda
-    val filteredGames = remember(uiState, searchQuery) {
+    // Filtrar juegos según la búsqueda Y categoría
+    val filteredGames = remember(uiState, searchQuery, selectedCategory) {
         when (val state = uiState) {
             is CatalogUiState.Success -> {
-                if (searchQuery.isBlank()) {
-                    state.games
-                } else {
-                    state.games.filter { game ->
+                var games = state.games
+                
+                // Filtrar por búsqueda
+                if (searchQuery.isNotBlank()) {
+                    games = games.filter { game ->
                         game.title.contains(searchQuery, ignoreCase = true) ||
                                 game.category.contains(searchQuery, ignoreCase = true) ||
                                 game.developer.contains(searchQuery, ignoreCase = true)
                     }
                 }
+                
+                // Filtrar por categoría
+                selectedCategory?.let { category ->
+                    // Convertir la categoría seleccionada (español) a inglés (BD)
+                    val categoryInDb = categoryMapReverse[category] ?: category.uppercase()
+                    Log.d("HomeScreen", "Filtrando por categoría: '$category' -> BD: '$categoryInDb'")
+                    
+                    games = games.filter { game ->
+                        val gameCategory = game.category.uppercase().trim()
+                        // Comparar directamente o a través del mapeo
+                        val matches = gameCategory.equals(categoryInDb.uppercase().trim(), ignoreCase = true) ||
+                                // También verificar si la categoría del juego mapeada coincide
+                                (categoryMap[gameCategory] == category)
+                        
+                        if (matches) {
+                            Log.d("HomeScreen", "✓ Juego '${game.title}' coincide - Categoría BD: '$gameCategory'")
+                        }
+                        matches
+                    }
+                    Log.d("HomeScreen", "Total juegos filtrados encontrados: ${games.size}")
+                }
+                
+                games
             }
             else -> emptyList()
         }
@@ -161,6 +188,24 @@ fun HomeScreen(
             }
 
             is CatalogUiState.Success -> {
+                // Debug: Verificar cuántos juegos hay y sus categorías
+                LaunchedEffect(state.games.size, selectedCategory, searchQuery) {
+                    Log.d("HomeScreen", "Total juegos cargados: ${state.games.size}")
+                    Log.d("HomeScreen", "Juegos filtrados: ${filteredGames.size}")
+                    Log.d("HomeScreen", "Categoría seleccionada: $selectedCategory")
+                    Log.d("HomeScreen", "Búsqueda activa: $isSearchActive, Query: $searchQuery")
+                    
+                    // Mostrar todas las categorías únicas de los juegos
+                    val uniqueCategories = state.games.map { it.category.uppercase().trim() }.distinct().sorted()
+                    Log.d("HomeScreen", "Categorías únicas en juegos: $uniqueCategories")
+                    
+                    if (state.games.isNotEmpty()) {
+                        state.games.take(5).forEach { game ->
+                            Log.d("HomeScreen", "Juego: ${game.title}, Categoría BD: '${game.category}'")
+                        }
+                    }
+                }
+                
                 if (isSearchActive && searchQuery.isNotEmpty()) {
                     // Vista de resultados de búsqueda
                     SearchResultsView(
@@ -187,43 +232,52 @@ fun HomeScreen(
                             )
                         }
 
-                        // Categorías
+                        // Categorías con funcionalidad
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
-                            CategoryChips()
-                        }
-
-                        // Ofertas especiales
-                        item {
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text(
-                                text = "OFERTAS ESPECIALES",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 16.dp)
+                            // Mostrar todas las categorías posibles de la BD
+                            CategoryChips(
+                                selectedCategory = selectedCategory,
+                                onCategorySelected = { category ->
+                                    selectedCategory = if (selectedCategory == category) null else category
+                                }
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
                         }
 
-                        item {
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(state.games.take(6)) { game ->
-                                    GameCard(
-                                        game = game,
-                                        onClick = { onNavigateToGameDetail(game.id) }
+                        // Mostrar indicador de filtro activo
+                        if (selectedCategory != null) {
+                            item {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${filteredGames.size} juegos de ${selectedCategory ?: ""}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
                                     )
+                                    TextButton(
+                                        onClick = { selectedCategory = null }
+                                    ) {
+                                        Text("Limpiar filtro")
+                                    }
                                 }
                             }
                         }
 
-                        // Noticias y actualizaciones
+                        // Ofertas especiales o juegos filtrados
                         item {
                             Spacer(modifier = Modifier.height(24.dp))
                             Text(
-                                text = "NOTICIAS Y ACTUALIZACIONES",
+                                text = if (selectedCategory != null) 
+                                    "JUEGOS DE ${selectedCategory?.uppercase()}"
+                                else 
+                                    "OFERTAS ESPECIALES",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -231,9 +285,108 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                         }
 
-                        item {
-                            NewsSection()
-                            Spacer(modifier = Modifier.height(16.dp))
+                        // Si hay categoría seleccionada, mostrar juegos en vertical
+                        if (selectedCategory != null) {
+                            item {
+                                if (filteredGames.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "No hay juegos disponibles",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "No encontramos juegos de $selectedCategory",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    // Mostrar juegos filtrados en vertical
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        filteredGames.forEach { game ->
+                                            VerticalGameCard(
+                                                game = game,
+                                                onClick = { onNavigateToGameDetail(game.id) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Sin filtro: mostrar ofertas especiales en horizontal
+                            item {
+                                if (state.games.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "No hay juegos disponibles",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "No hay juegos en la base de datos",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        items(state.games.take(10)) { game ->
+                                            GameCard(
+                                                game = game,
+                                                onClick = { onNavigateToGameDetail(game.id) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Noticias solo si no hay filtro activo
+                        if (selectedCategory == null) {
+                            item {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text(
+                                    text = "NOTICIAS Y ACTUALIZACIONES",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+
+                            item {
+                                NewsSection()
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
                         }
                     }
                 }
@@ -500,9 +653,31 @@ fun FeaturedBanner(
     }
 }
 
+// Mapeo de categorías de BD (inglés) a español para la UI
+private val categoryMap = mapOf(
+    "ACTION" to "ACCIÓN",
+    "ADVENTURE" to "AVENTURA",
+    "RPG" to "RPG",
+    "STRATEGY" to "ESTRATEGIA",
+    "SPORTS" to "DEPORTES",
+    "SIMULATION" to "SIMULACIÓN",
+    "RACING" to "CARRERAS",
+    "PUZZLE" to "PUZZLE",
+    "HORROR" to "TERROR",
+    "INDIE" to "INDIE"
+)
+
+// Mapeo inverso: español a inglés (BD)
+private val categoryMapReverse = categoryMap.entries.associate { (k, v) -> v to k }
+
 @Composable
-fun CategoryChips() {
-    val categories = listOf("ACCIÓN", "TERROR", "SUPERVIVENCIA", "AVENTURA")
+fun CategoryChips(
+    selectedCategory: String?,
+    onCategorySelected: (String) -> Unit,
+    availableCategories: List<String> = emptyList()
+) {
+    // Mostrar todas las categorías posibles de la BD en español
+    val categories = categoryMap.values.toList()
 
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -510,19 +685,126 @@ fun CategoryChips() {
     ) {
         items(categories) { category ->
             FilterChip(
-                selected = false,
-                onClick = { /* TODO: Filtrar por categoría */ },
+                selected = selectedCategory == category,
+                onClick = { onCategorySelected(category) },
                 label = {
                     Text(
                         text = category,
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (selectedCategory == category) 
+                            FontWeight.Bold 
+                        else 
+                            FontWeight.Normal
                     )
                 },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                border = if (selectedCategory == category) {
+                    FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = true,
+                        borderColor = MaterialTheme.colorScheme.primary,
+                        selectedBorderColor = MaterialTheme.colorScheme.primary,
+                        borderWidth = 2.dp,
+                        selectedBorderWidth = 2.dp
+                    )
+                } else {
+                    FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = false
+                    )
+                }
             )
+        }
+    }
+}
+
+@Composable
+fun VerticalGameCard(
+    game: Game,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Imagen del juego
+            AsyncImage(
+                model = game.headerImage ?: game.backgroundImage,
+                contentDescription = game.title,
+                modifier = Modifier
+                    .width(140.dp)
+                    .fillMaxHeight(),
+                contentScale = ContentScale.Crop
+            )
+
+            // Información del juego
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = game.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = game.category,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (game.isFree) "GRATIS" else "S/${game.price}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (game.isFree)
+                            Color(0xFF00FF00)
+                        else
+                            MaterialTheme.colorScheme.secondary
+                    )
+
+                    if (game.rating > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "★",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFFFD700)
+                            )
+                            Text(
+                                text = String.format("%.1f", game.rating),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
