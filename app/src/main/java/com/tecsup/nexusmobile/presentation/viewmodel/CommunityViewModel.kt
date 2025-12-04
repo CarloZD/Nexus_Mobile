@@ -48,7 +48,6 @@ class CommunityViewModel(
         setupRealtimePostsListener()
     }
 
-    // Listener en tiempo real para posts
     private fun setupRealtimePostsListener() {
         _uiState.value = CommunityUiState.Loading
 
@@ -98,7 +97,6 @@ class CommunityViewModel(
 
             _createPostState.value = CreatePostUiState.Loading
 
-            // Obtener información del usuario desde Firestore
             val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
             val userName = userDoc.getString("username")?.ifEmpty { null }
                 ?: userDoc.getString("fullName")?.ifEmpty { null }
@@ -115,7 +113,6 @@ class CommunityViewModel(
             )
                 .onSuccess { post ->
                     _createPostState.value = CreatePostUiState.Success(post)
-                    // No necesitamos recargar manualmente, el listener se encarga
                 }
                 .onFailure { error ->
                     _createPostState.value = CreatePostUiState.Error(
@@ -129,87 +126,66 @@ class CommunityViewModel(
         viewModelScope.launch {
             val currentUser = auth.currentUser ?: return@launch
             repository.toggleLike(postId, currentUser.uid)
-                .onSuccess {
-                    // El listener actualizará automáticamente
-                }
-                .onFailure {
-                    // Error silencioso
-                }
         }
     }
 
-    // Listener en tiempo real para comentarios de un post específico
     fun loadComments(postId: String) {
-        // Si ya existe un listener para este post, no crear otro
+        // Si ya existe un listener, no crear otro
         if (commentListeners.containsKey(postId)) {
-            android.util.Log.d("CommunityVM", "Listener ya existe para post $postId")
+            android.util.Log.d("CommunityVM", "Listener ya existe para: $postId")
             return
         }
 
-        android.util.Log.d("CommunityVM", "Creando listener para post $postId")
+        android.util.Log.d("CommunityVM", "⭐ Creando listener de comentarios para post: $postId")
 
         val listener = firestore.collection("comments")
             .whereEqualTo("postId", postId)
             .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    android.util.Log.e("CommunityVM", "Error listener comentarios: ${error.message}")
-                    android.util.Log.e("CommunityVM", "Error completo: ", error)
+                    android.util.Log.e("CommunityVM", "ERROR: ${error.message}")
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null) {
-                    android.util.Log.d("CommunityVM", "Snapshot recibido - Total documentos: ${snapshot.documents.size}")
+                    android.util.Log.d("CommunityVM", "📦 Documentos recibidos: ${snapshot.documents.size}")
+
+                    // Mostrar cada documento crudo
+                    snapshot.documents.forEachIndexed { index, doc ->
+                        android.util.Log.d("CommunityVM", "Documento #${index + 1}: ${doc.id}")
+                        android.util.Log.d("CommunityVM", "  Datos: ${doc.data}")
+                    }
 
                     val commentsList = snapshot.documents.mapNotNull { doc ->
                         try {
-                            android.util.Log.d("CommunityVM", "Procesando doc ${doc.id}: ${doc.data}")
-
-                            // Obtener los datos manualmente para debug
-                            val postIdField = doc.getString("postId")
-                            val userIdField = doc.getString("userId")
-                            val userNameField = doc.getString("userName")
-                            val contentField = doc.getString("content")
-
-                            android.util.Log.d("CommunityVM", "Campos - postId: $postIdField, userId: $userIdField, userName: $userNameField, content: $contentField")
-
-                            doc.toObject(Comment::class.java)?.copy(id = doc.id)
+                            val comment = doc.toObject(Comment::class.java)?.copy(id = doc.id)
+                            android.util.Log.d("CommunityVM", "✅ Parseado: ${comment?.userName} - ${comment?.content}")
+                            comment
                         } catch (e: Exception) {
-                            android.util.Log.e("CommunityVM", "Error al parsear comentario ${doc.id}: ${e.message}")
-                            android.util.Log.e("CommunityVM", "Stack trace: ", e)
+                            android.util.Log.e("CommunityVM", "❌ Error parseando: ${e.message}")
                             null
                         }
                     }
 
-                    android.util.Log.d("CommunityVM", "Comentarios parseados exitosamente: ${commentsList.size}")
-                    commentsList.forEach { comment ->
-                        android.util.Log.d("CommunityVM", "Comentario: ${comment.userName} - ${comment.content}")
+                    android.util.Log.d("CommunityVM", "✅ Total comentarios parseados: ${commentsList.size}")
+
+                    // Actualizar estado
+                    _comments.value = _comments.value.toMutableMap().apply {
+                        this[postId] = commentsList
                     }
 
-                    // Actualizar el mapa de comentarios de forma inmutable
-                    val currentComments = _comments.value.toMutableMap()
-                    currentComments[postId] = commentsList
-                    _comments.value = currentComments
-
-                    android.util.Log.d("CommunityVM", "Estado actualizado - Total comentarios en mapa: ${_comments.value[postId]?.size}")
-                } else {
-                    android.util.Log.d("CommunityVM", "Snapshot es null para post $postId")
-                    val currentComments = _comments.value.toMutableMap()
-                    currentComments[postId] = emptyList()
-                    _comments.value = currentComments
+                    android.util.Log.d("CommunityVM", "📊 Comentarios en estado: ${_comments.value[postId]?.size ?: 0}")
                 }
             }
 
         commentListeners[postId] = listener
-        android.util.Log.d("CommunityVM", "Listener registrado para post $postId")
     }
 
-    // Detener listener de comentarios cuando se cierra el post
     fun stopListeningToComments(postId: String) {
+        android.util.Log.d("CommunityVM", "🛑 Deteniendo listener: $postId")
         commentListeners[postId]?.remove()
         commentListeners.remove(postId)
 
-        // Limpiar los comentarios del estado
         _comments.value = _comments.value.toMutableMap().apply {
             remove(postId)
         }
@@ -224,7 +200,6 @@ class CommunityViewModel(
             }
 
             try {
-                // Obtener información del usuario desde Firestore
                 val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
                 val userName = userDoc.getString("username")?.ifEmpty { null }
                     ?: userDoc.getString("fullName")?.ifEmpty { null }
@@ -232,7 +207,7 @@ class CommunityViewModel(
                     ?: "Usuario"
                 val userAvatarUrl = userDoc.getString("avatarUrl")
 
-                android.util.Log.d("CommunityVM", "Agregando comentario - Post: $postId, Usuario: $userName")
+                android.util.Log.d("CommunityVM", "Agregando comentario de: $userName")
 
                 repository.addComment(
                     postId = postId,
@@ -242,15 +217,13 @@ class CommunityViewModel(
                     content = content
                 )
                     .onSuccess {
-                        android.util.Log.d("CommunityVM", "Comentario agregado exitosamente")
-                        // El listener actualizará automáticamente los comentarios
-                        // No necesitamos recargar manualmente
+                        android.util.Log.d("CommunityVM", "✅ Comentario agregado")
                     }
                     .onFailure { error ->
-                        android.util.Log.e("CommunityVM", "Error al agregar comentario: ${error.message}")
+                        android.util.Log.e("CommunityVM", "❌ Error: ${error.message}")
                     }
             } catch (e: Exception) {
-                android.util.Log.e("CommunityVM", "Excepción al agregar comentario: ${e.message}")
+                android.util.Log.e("CommunityVM", "❌ Excepción: ${e.message}")
             }
         }
     }
@@ -266,7 +239,6 @@ class CommunityViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        // Limpiar todos los listeners
         postsListener?.remove()
         commentListeners.values.forEach { it.remove() }
         commentListeners.clear()
