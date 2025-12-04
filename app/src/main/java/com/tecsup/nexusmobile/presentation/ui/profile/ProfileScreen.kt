@@ -10,7 +10,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -113,14 +112,6 @@ fun ProfileScreen(
                 ProfileMenuItem(
                     icon = Icons.Default.Lock,
                     title = "Privacidad y Seguridad",
-                    onClick = { /* TODO */ }
-                )
-            }
-
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.Notifications,
-                    title = "Notificaciones",
                     onClick = { /* TODO */ }
                 )
             }
