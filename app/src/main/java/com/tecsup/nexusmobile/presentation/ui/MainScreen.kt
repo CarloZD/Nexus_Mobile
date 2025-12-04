@@ -1,5 +1,6 @@
 package com.tecsup.nexusmobile.presentation.ui
 
+import ProfileScreen
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -31,7 +32,7 @@ import com.tecsup.nexusmobile.presentation.ui.library.LibraryScreen
 import com.tecsup.nexusmobile.presentation.ui.profile.AboutScreen
 import com.tecsup.nexusmobile.presentation.ui.profile.EditProfileScreen
 import com.tecsup.nexusmobile.presentation.ui.profile.HelpSupportScreen
-import com.tecsup.nexusmobile.presentation.ui.profile.ProfileScreen
+import com.tecsup.nexusmobile.presentation.ui.profile.PrivacySecurityScreen
 
 // Rutas de navegación
 sealed class BottomNavScreen(val route: String, val title: String, val icon: ImageVector) {
@@ -68,6 +69,10 @@ object AboutRoute {
 
 object HelpSupportRoute {
     const val route = "help_support"
+}
+
+object PrivacySecurityRoute {
+    const val route = "privacy_security"
 }
 
 object PaymentSuccessRoute {
@@ -192,6 +197,9 @@ fun MainScreen(
                     },
                     onNavigateToHelpSupport = {
                         navController.navigate(HelpSupportRoute.route)
+                    },
+                    onNavigateToPrivacySecurity = {
+                        navController.navigate(PrivacySecurityRoute.route)
                     }
                 )
             }
@@ -299,6 +307,14 @@ fun MainScreen(
 
             composable(HelpSupportRoute.route) {
                 HelpSupportScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(PrivacySecurityRoute.route) {
+                PrivacySecurityScreen(
                     onBackClick = {
                         navController.popBackStack()
                     }

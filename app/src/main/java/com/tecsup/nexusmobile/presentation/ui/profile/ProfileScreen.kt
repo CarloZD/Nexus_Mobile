@@ -1,5 +1,3 @@
-package com.tecsup.nexusmobile.presentation.ui.profile
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,7 +9,6 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +30,7 @@ fun ProfileScreen(
     onNavigateToEditProfile: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
     onNavigateToHelpSupport: () -> Unit = {},
+    onNavigateToPrivacySecurity: () -> Unit = {},
     viewModel: ProfileViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -47,11 +45,6 @@ fun ProfileScreen(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                },
-                actions = {
-                    IconButton(onClick = { /* TODO: Configuración */ }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Configuración")
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
@@ -88,70 +81,70 @@ fun ProfileScreen(
                         )
                     }
 
-            // Sección de configuración de cuenta
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "CONFIGURACIÓN DE CUENTA",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+                    // Sección de configuración de cuenta
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "CONFIGURACIÓN DE CUENTA",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
 
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.Person,
-                    title = "Editar Perfil",
-                    onClick = onNavigateToEditProfile
-                )
-            }
+                    item {
+                        ProfileMenuItem(
+                            icon = Icons.Default.Person,
+                            title = "Editar Perfil",
+                            onClick = onNavigateToEditProfile
+                        )
+                    }
 
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.Lock,
-                    title = "Privacidad y Seguridad",
-                    onClick = { /* TODO */ }
-                )
-            }
+                    item {
+                        ProfileMenuItem(
+                            icon = Icons.Default.Lock,
+                            title = "Privacidad y Seguridad",
+                            onClick = onNavigateToPrivacySecurity
+                        )
+                    }
 
-            // Sección de otras opciones
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "OTRAS OPCIONES",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+                    // Sección de otras opciones
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "OTRAS OPCIONES",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
 
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.Info,
-                    title = "Acerca de",
-                    onClick = onNavigateToAbout
-                )
-            }
+                    item {
+                        ProfileMenuItem(
+                            icon = Icons.Default.Info,
+                            title = "Acerca de",
+                            onClick = onNavigateToAbout
+                        )
+                    }
 
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.Info,
-                    title = "Ayuda y Soporte",
-                    onClick = onNavigateToHelpSupport
-                )
-            }
+                    item {
+                        ProfileMenuItem(
+                            icon = Icons.Default.Info,
+                            title = "Ayuda y Soporte",
+                            onClick = onNavigateToHelpSupport
+                        )
+                    }
 
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.ExitToApp,
-                    title = "Cerrar Sesión",
-                    onClick = { showLogoutDialog = true },
-                    isDestructive = true
-                )
-            }
+                    item {
+                        ProfileMenuItem(
+                            icon = Icons.Default.ExitToApp,
+                            title = "Cerrar Sesión",
+                            onClick = { showLogoutDialog = true },
+                            isDestructive = true
+                        )
+                    }
                 }
             }
 
