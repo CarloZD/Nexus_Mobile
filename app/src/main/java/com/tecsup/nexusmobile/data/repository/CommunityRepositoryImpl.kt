@@ -30,7 +30,7 @@ class CommunityRepositoryImpl : CommunityRepository {
         }
     }
 
-    suspend fun createPost(
+    override suspend fun createPost(
         userId: String,
         userName: String,
         userAvatarUrl: String?,
@@ -45,6 +45,7 @@ class CommunityRepositoryImpl : CommunityRepository {
                 userAvatarUrl = userAvatarUrl,
                 title = title,
                 content = content,
+                imageUrls = imageUrls,
                 createdAt = System.currentTimeMillis()
             )
 

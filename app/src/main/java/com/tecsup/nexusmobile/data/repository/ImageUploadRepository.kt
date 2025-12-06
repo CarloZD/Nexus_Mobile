@@ -11,6 +11,9 @@ class ImageUploadRepository {
     private val firestore = FirebaseFirestore.getInstance()
     private val cloudinaryService = CloudinaryService()
 
+    /**
+     * Sube una imagen de perfil de usuario
+     */
     suspend fun uploadProfileImage(context: Context, imageUri: Uri): Result<String> {
         return try {
             val currentUser = auth.currentUser
@@ -25,6 +28,32 @@ class ImageUploadRepository {
 
             // Subir a Cloudinary
             cloudinaryService.uploadProfileImage(context, imageUri, currentUser.uid)
+
+        } catch (e: Exception) {
+            Result.failure(Exception("Error al subir la imagen: ${e.message ?: "Error desconocido"}"))
+        }
+    }
+
+    /**
+     * Sube una imagen para un post de la comunidad
+     */
+    suspend fun uploadPostImage(context: Context, imageUri: Uri): Result<String> {
+        return try {
+            val currentUser = auth.currentUser
+            if (currentUser == null) {
+                return Result.failure(Exception("Usuario no autenticado"))
+            }
+
+            // Verificar que la URI sea válida
+            if (imageUri.toString().isEmpty()) {
+                return Result.failure(Exception("URI de imagen inválida"))
+            }
+
+            // Subir a Cloudinary con un identificador único para posts
+            // Formato: post_USERID_TIMESTAMP para distinguir de fotos de perfil
+            val timestamp = System.currentTimeMillis()
+            val uniqueId = "post_${currentUser.uid}_$timestamp"
+            cloudinaryService.uploadProfileImage(context, imageUri, uniqueId)
 
         } catch (e: Exception) {
             Result.failure(Exception("Error al subir la imagen: ${e.message ?: "Error desconocido"}"))
