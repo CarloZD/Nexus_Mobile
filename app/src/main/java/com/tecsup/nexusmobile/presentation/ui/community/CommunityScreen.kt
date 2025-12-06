@@ -2,6 +2,7 @@ package com.tecsup.nexusmobile.presentation.ui.community
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -36,8 +39,8 @@ fun CommunityScreen(
 
     var showCreatePostDialog by remember { mutableStateOf(false) }
     var expandedPostId by remember { mutableStateOf<String?>(null) }
+    var selectedFilter by remember { mutableStateOf(FilterType.ALL) }
 
-    // Cerrar diálogo cuando se crea exitosamente un post
     LaunchedEffect(createPostState) {
         if (createPostState is CreatePostUiState.Success) {
             showCreatePostDialog = false
@@ -45,25 +48,73 @@ fun CommunityScreen(
         }
     }
 
-    // Limpiar listeners cuando se colapsa un post
-    LaunchedEffect(expandedPostId) {
-        // Si se cambió el post expandido, detener el listener del anterior
-        // (excepto si es el mismo o null)
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "COMUNIDAD",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Text(
+                            "COMUNIDAD NEXUS",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (uiState is CommunityUiState.Success) {
+                            val posts = (uiState as CommunityUiState.Success).posts
+                            Text(
+                                "${posts.size} publicaciones",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 },
                 actions = {
+                    // Botón de filtro
+                    var showFilterMenu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showFilterMenu = true }) {
+                        Icon(
+                            Icons.Default.FilterList,
+                            contentDescription = "Filtrar",
+                            tint = if (selectedFilter != FilterType.ALL)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showFilterMenu,
+                        onDismissRequest = { showFilterMenu = false }
+                    ) {
+                        FilterType.values().forEach { filter ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(filter.icon)
+                                        Text(filter.label)
+                                    }
+                                },
+                                onClick = {
+                                    selectedFilter = filter
+                                    showFilterMenu = false
+                                },
+                                leadingIcon = {
+                                    if (selectedFilter == filter) {
+                                        Icon(Icons.Default.Check, null)
+                                    }
+                                }
+                            )
+                        }
+                    }
+
                     IconButton(onClick = { showCreatePostDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Crear post")
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Crear post",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -72,12 +123,12 @@ fun CommunityScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = { showCreatePostDialog = true },
+                icon = { Icon(Icons.Default.Edit, "Crear") },
+                text = { Text("Nueva Publicación") },
                 containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Crear post")
-            }
+            )
         }
     ) { padding ->
         when (val state = uiState) {
@@ -88,40 +139,34 @@ fun CommunityScreen(
                         .padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            "Cargando comunidad...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
             is CommunityUiState.Success -> {
-                if (state.posts.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(padding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "No hay posts aún",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "¡Sé el primero en compartir algo!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                // Filtrar posts según el filtro seleccionado
+                val filteredPosts = when (selectedFilter) {
+                    FilterType.ALL -> state.posts
+                    FilterType.POPULAR -> state.posts.sortedByDescending { it.likesCount }
+                    FilterType.RECENT -> state.posts.sortedByDescending { it.createdAt }
+                    FilterType.DISCUSSED -> state.posts.sortedByDescending { it.commentsCount }
+                }
+
+                if (filteredPosts.isEmpty()) {
+                    EmptyCommunityView(
+                        modifier = Modifier.padding(padding),
+                        onCreatePost = { showCreatePostDialog = true }
+                    )
                 } else {
                     LazyColumn(
                         modifier = Modifier
@@ -130,18 +175,28 @@ fun CommunityScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        item {
-                            Text(
-                                text = "ACTIVIDADES DE LA COMUNIDAD",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                        // Header con filtro activo
+                        if (selectedFilter != FilterType.ALL) {
+                            item {
+                                FilterChip(
+                                    selected = true,
+                                    onClick = { selectedFilter = FilterType.ALL },
+                                    label = {
+                                        Text("${selectedFilter.icon} ${selectedFilter.label}")
+                                    },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Quitar filtro",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                )
+                            }
                         }
 
-                        items(state.posts, key = { it.id }) { post ->
-                            PostCard(
+                        items(filteredPosts, key = { it.id }) { post ->
+                            EnhancedPostCard(
                                 post = post,
                                 isLiked = viewModel.isPostLiked(post),
                                 comments = comments[post.id] ?: emptyList(),
@@ -149,11 +204,9 @@ fun CommunityScreen(
                                 onLikeClick = { viewModel.toggleLike(post.id) },
                                 onCommentClick = {
                                     if (expandedPostId == post.id) {
-                                        // Cerrar comentarios
                                         viewModel.stopListeningToComments(post.id)
                                         expandedPostId = null
                                     } else {
-                                        // Abrir comentarios y cargar
                                         expandedPostId = post.id
                                         viewModel.loadComments(post.id)
                                     }
@@ -163,50 +216,33 @@ fun CommunityScreen(
                                 }
                             )
                         }
+
+                        // Espaciado para el FAB
+                        item {
+                            Spacer(modifier = Modifier.height(80.dp))
+                        }
                     }
                 }
             }
 
             is CommunityUiState.Error -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Error al cargar los posts",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Text(
-                            text = state.message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Button(onClick = { viewModel.loadPosts() }) {
-                            Text("Reintentar")
-                        }
-                    }
-                }
+                ErrorCommunityView(
+                    message = state.message,
+                    onRetry = { viewModel.loadPosts() },
+                    modifier = Modifier.padding(padding)
+                )
             }
         }
     }
 
-    // Diálogo para crear post
     if (showCreatePostDialog) {
         val currentCreateState = createPostState
-        CreatePostDialog(
+        EnhancedCreatePostDialog(
             onDismiss = {
                 showCreatePostDialog = false
                 viewModel.resetCreatePostState()
             },
-            onCreatePost = { title, content ->
+            onCreatePost = { title, content, tags ->
                 viewModel.createPost(title, content)
             },
             isLoading = currentCreateState is CreatePostUiState.Loading,
@@ -218,8 +254,99 @@ fun CommunityScreen(
     }
 }
 
+enum class FilterType(val label: String, val icon: String) {
+    ALL("Todo", "📰"),
+    POPULAR("Popular", "🔥"),
+    RECENT("Reciente", "⏰"),
+    DISCUSSED("Más comentados", "💬")
+}
+
 @Composable
-fun PostCard(
+fun EmptyCommunityView(
+    modifier: Modifier = Modifier,
+    onCreatePost: () -> Unit
+) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Text(
+                text = "🎮",
+                style = MaterialTheme.typography.displayLarge
+            )
+            Text(
+                text = "¡Sé el primero!",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "No hay publicaciones aún.\n¡Comparte algo con la comunidad!",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onCreatePost,
+                modifier = Modifier.fillMaxWidth(0.7f)
+            ) {
+                Icon(Icons.Default.Add, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Crear Publicación")
+            }
+        }
+    }
+}
+
+@Composable
+fun ErrorCommunityView(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ErrorOutline,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.error
+            )
+            Text(
+                text = "Error al cargar",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Button(onClick = onRetry) {
+                Icon(Icons.Default.Refresh, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Reintentar")
+            }
+        }
+    }
+}
+
+@Composable
+fun EnhancedPostCard(
     post: Post,
     isLiked: Boolean,
     comments: List<com.tecsup.nexusmobile.domain.model.Comment>,
@@ -233,8 +360,14 @@ fun PostCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isExpanded) 8.dp else 2.dp
+        ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isExpanded)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            else
+                MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(
@@ -243,196 +376,291 @@ fun PostCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header con usuario
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Avatar
-                Surface(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        if (post.userAvatarUrl != null && post.userAvatarUrl.isNotEmpty()) {
-                            AsyncImage(
-                                model = post.userAvatarUrl,
-                                contentDescription = "Avatar",
-                                modifier = Modifier.fillMaxSize()
+            // Header con gradiente
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                MaterialTheme.colorScheme.secondaryContainer
                             )
-                        } else {
+                        )
+                    )
+                    .padding(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Avatar mejorado
+                    Surface(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape),
+                        color = MaterialTheme.colorScheme.primary,
+                        shadowElevation = 4.dp
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            if (post.userAvatarUrl != null && post.userAvatarUrl.isNotEmpty()) {
+                                AsyncImage(
+                                    model = post.userAvatarUrl,
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Text(
+                                    text = post.userName.take(1).uppercase(),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = post.userName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Avatar",
-                                modifier = Modifier.size(24.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                Icons.Default.AccessTime,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = formatTimeAgo(post.createdAt),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                             )
                         }
                     }
                 }
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = post.userName,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = formatDate(post.createdAt),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
             }
 
-            Divider()
-
-            // Título
-            Text(
-                text = post.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            // Título con ícono
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Default.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = post.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
             // Contenido
             Text(
                 text = post.content,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Divider()
 
-            // Acciones
+            // Acciones mejoradas
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                // Like button
-                TextButton(
+                // Like button mejorado
+                Button(
                     onClick = onLikeClick,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = if (isLiked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isLiked)
+                            MaterialTheme.colorScheme.errorContainer
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (isLiked)
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Icon(
-                        imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                         contentDescription = "Like",
                         modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("${post.likesCount}")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "${post.likesCount}",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
-                // Comment button
-                TextButton(
+                // Comment button mejorado
+                Button(
                     onClick = onCommentClick,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isExpanded)
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (isExpanded)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Send,
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = "Comentarios",
                         modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("${post.commentsCount}")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "${post.commentsCount}",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
-            // Sección de comentarios expandible con animación
+            // Sección de comentarios
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = expandVertically(
-                    animationSpec = tween(300),
-                    expandFrom = Alignment.Top
-                ) + fadeIn(animationSpec = tween(300)),
-                exit = shrinkVertically(
-                    animationSpec = tween(300),
-                    shrinkTowards = Alignment.Top
-                ) + fadeOut(animationSpec = tween(300))
+                enter = expandVertically(animationSpec = tween(300)) + fadeIn(),
+                exit = shrinkVertically(animationSpec = tween(300)) + fadeOut()
             ) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Divider()
 
-                    // Título de comentarios
+                    // Header de comentarios
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Comentarios (${comments.size})",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        if (comments.isEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.ChatBubble,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
                             Text(
-                                text = "Sé el primero en comentar",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Comentarios (${comments.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
 
-                    // Lista de comentarios con animación
+                    // Lista de comentarios
                     if (comments.isNotEmpty()) {
                         Column(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             comments.forEach { comment ->
-                                CommentItem(comment = comment)
+                                EnhancedCommentItem(comment = comment)
+                            }
+                        }
+                    } else {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "💬 Sé el primero en comentar",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
 
-                    // Input para nuevo comentario
-                    Row(
+                    // Input de comentario mejorado
+                    Card(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(4.dp)
                     ) {
-                        OutlinedTextField(
-                            value = commentText,
-                            onValueChange = { commentText = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("Escribe un comentario...") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(24.dp)
-                        )
-                        IconButton(
-                            onClick = {
-                                if (commentText.isNotBlank()) {
-                                    onAddComment(commentText.trim())
-                                    commentText = ""
-                                }
-                            },
-                            enabled = commentText.isNotBlank(),
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = if (commentText.isNotBlank())
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.surfaceVariant
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Send,
-                                contentDescription = "Enviar",
-                                tint = if (commentText.isNotBlank())
-                                    MaterialTheme.colorScheme.onPrimary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            OutlinedTextField(
+                                value = commentText,
+                                onValueChange = { commentText = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = {
+                                    Text(
+                                        "Escribe un comentario...",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                maxLines = 3,
+                                shape = RoundedCornerShape(24.dp)
                             )
+                            IconButton(
+                                onClick = {
+                                    if (commentText.isNotBlank()) {
+                                        onAddComment(commentText.trim())
+                                        commentText = ""
+                                    }
+                                },
+                                enabled = commentText.isNotBlank(),
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(
+                                        if (commentText.isNotBlank())
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.surfaceVariant,
+                                        CircleShape
+                                    )
+                            ) {
+                                Icon(
+                                    Icons.Default.Send,
+                                    contentDescription = "Enviar",
+                                    tint = if (commentText.isNotBlank())
+                                        MaterialTheme.colorScheme.onPrimary
+                                    else
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -442,121 +670,186 @@ fun PostCard(
 }
 
 @Composable
-fun CommentItem(comment: com.tecsup.nexusmobile.domain.model.Comment) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+fun EnhancedCommentItem(comment: com.tecsup.nexusmobile.domain.model.Comment) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        // Avatar del comentario
-        Surface(
+        Row(
             modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
+            // Avatar del comentario
+            Surface(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape),
+                color = MaterialTheme.colorScheme.primaryContainer
             ) {
-                if (comment.userAvatarUrl != null && comment.userAvatarUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = comment.userAvatarUrl,
-                        contentDescription = "Avatar",
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Avatar",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (comment.userAvatarUrl != null && comment.userAvatarUrl.isNotEmpty()) {
+                        AsyncImage(
+                            model = comment.userAvatarUrl,
+                            contentDescription = "Avatar",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Text(
+                            text = comment.userName.take(1).uppercase(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
-        }
 
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = comment.userName,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = formatDate(comment.createdAt),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Text(
-                    text = comment.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(12.dp)
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = comment.userName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = formatTimeAgo(comment.createdAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = comment.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun CreatePostDialog(
+fun EnhancedCreatePostDialog(
     onDismiss: () -> Unit,
-    onCreatePost: (String, String) -> Unit,
+    onCreatePost: (String, String, List<String>) -> Unit,
     isLoading: Boolean,
     errorMessage: String?
 ) {
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
+    val maxTitleLength = 100
+    val maxContentLength = 1000
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                "Crear Nuevo Post",
-                fontWeight = FontWeight.Bold
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Create,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
             )
+        },
+        title = {
+            Column {
+                Text(
+                    "Nueva Publicación",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Comparte con la comunidad Nexus",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Título
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = {
+                        if (it.length <= maxTitleLength) title = it
+                    },
                     label = { Text("Título") },
+                    placeholder = { Text("¿De qué quieres hablar?") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    enabled = !isLoading
+                    enabled = !isLoading,
+                    supportingText = {
+                        Text(
+                            "${title.length}/$maxTitleLength",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Title, null)
+                    }
                 )
 
+                // Contenido
                 OutlinedTextField(
                     value = content,
-                    onValueChange = { content = it },
+                    onValueChange = {
+                        if (it.length <= maxContentLength) content = it
+                    },
                     label = { Text("Contenido") },
+                    placeholder = { Text("Escribe aquí tu publicación...") },
                     modifier = Modifier.fillMaxWidth(),
-                    minLines = 4,
-                    maxLines = 8,
-                    enabled = !isLoading
+                    minLines = 5,
+                    maxLines = 10,
+                    enabled = !isLoading,
+                    supportingText = {
+                        Text(
+                            "${content.length}/$maxContentLength",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 )
 
                 if (errorMessage != null) {
-                    Text(
-                        text = errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Error,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = errorMessage,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -564,7 +857,7 @@ fun CreatePostDialog(
             Button(
                 onClick = {
                     if (title.isNotBlank() && content.isNotBlank()) {
-                        onCreatePost(title.trim(), content.trim())
+                        onCreatePost(title.trim(), content.trim(), emptyList())
                     }
                 },
                 enabled = title.isNotBlank() && content.isNotBlank() && !isLoading
@@ -575,6 +868,8 @@ fun CreatePostDialog(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
+                    Icon(Icons.Default.Send, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text("Publicar")
                 }
             }
@@ -590,7 +885,18 @@ fun CreatePostDialog(
     )
 }
 
-private fun formatDate(timestamp: Long): String {
-    val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
-    return sdf.format(Date(timestamp))
+private fun formatTimeAgo(timestamp: Long): String {
+    val now = System.currentTimeMillis()
+    val diff = now - timestamp
+
+    return when {
+        diff < 60_000 -> "Ahora"
+        diff < 3600_000 -> "${diff / 60_000}m"
+        diff < 86400_000 -> "${diff / 3600_000}h"
+        diff < 604800_000 -> "${diff / 86400_000}d"
+        else -> {
+            val sdf = SimpleDateFormat("dd MMM", Locale.getDefault())
+            sdf.format(Date(timestamp))
+        }
+    }
 }

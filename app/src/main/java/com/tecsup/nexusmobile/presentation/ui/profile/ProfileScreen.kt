@@ -36,6 +36,10 @@ fun ProfileScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        viewModel.loadProfile()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

@@ -48,6 +48,8 @@ fun EditProfileScreen(
             is UpdateProfileUiState.Success -> {
                 if (isUpdatingProfile) {
                     isUpdatingProfile = false
+                    // Recargar el perfil para asegurar que se muestren los datos actualizados
+                    viewModel.loadProfile()
                     onBackClick()
                 }
             }
