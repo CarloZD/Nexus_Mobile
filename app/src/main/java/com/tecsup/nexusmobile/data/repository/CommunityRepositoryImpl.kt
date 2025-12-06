@@ -30,12 +30,13 @@ class CommunityRepositoryImpl : CommunityRepository {
         }
     }
 
-    override suspend fun createPost(
+    suspend fun createPost(
         userId: String,
         userName: String,
         userAvatarUrl: String?,
         title: String,
-        content: String
+        content: String,
+        imageUrls: List<String>
     ): Result<Post> {
         return try {
             val post = Post(

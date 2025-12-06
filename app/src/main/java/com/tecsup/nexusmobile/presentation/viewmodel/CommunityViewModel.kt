@@ -87,7 +87,7 @@ class CommunityViewModel(
         }
     }
 
-    fun createPost(title: String, content: String) {
+    fun createPost(title: String, content: String, imageUrls: List<String> = emptyList()) {
         viewModelScope.launch {
             val currentUser = auth.currentUser
             if (currentUser == null) {
@@ -109,7 +109,8 @@ class CommunityViewModel(
                 userName = userName,
                 userAvatarUrl = userAvatarUrl,
                 title = title,
-                content = content
+                content = content,
+                imageUrls = imageUrls
             )
                 .onSuccess { post ->
                     _createPostState.value = CreatePostUiState.Success(post)
@@ -130,7 +131,6 @@ class CommunityViewModel(
     }
 
     fun loadComments(postId: String) {
-        // Si ya existe un listener, no crear otro
         if (commentListeners.containsKey(postId)) {
             android.util.Log.d("CommunityVM", "Listener ya existe para: $postId")
             return
@@ -150,12 +150,6 @@ class CommunityViewModel(
                 if (snapshot != null) {
                     android.util.Log.d("CommunityVM", "📦 Documentos recibidos: ${snapshot.documents.size}")
 
-                    // Mostrar cada documento crudo
-                    snapshot.documents.forEachIndexed { index, doc ->
-                        android.util.Log.d("CommunityVM", "Documento #${index + 1}: ${doc.id}")
-                        android.util.Log.d("CommunityVM", "  Datos: ${doc.data}")
-                    }
-
                     val commentsList = snapshot.documents.mapNotNull { doc ->
                         try {
                             val comment = doc.toObject(Comment::class.java)?.copy(id = doc.id)
@@ -169,7 +163,6 @@ class CommunityViewModel(
 
                     android.util.Log.d("CommunityVM", "✅ Total comentarios parseados: ${commentsList.size}")
 
-                    // Actualizar estado
                     _comments.value = _comments.value.toMutableMap().apply {
                         this[postId] = commentsList
                     }

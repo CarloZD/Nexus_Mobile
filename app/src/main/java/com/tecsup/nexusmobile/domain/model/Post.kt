@@ -10,13 +10,13 @@ data class Post(
     val userAvatarUrl: String? = null,
     val title: String = "",
     val content: String = "",
+    val imageUrls: List<String> = emptyList(), // URLs de imágenes del post
     val likesCount: Int = 0,
     val commentsCount: Int = 0,
     @PropertyName("createdAt")
-    private val _createdAt: Any? = null, // Puede ser Timestamp o Long
+    private val _createdAt: Any? = null,
     val likedBy: List<String> = emptyList()
 ) {
-    // Propiedad computada que convierte Timestamp a Long
     val createdAt: Long
         get() = when (_createdAt) {
             is Timestamp -> _createdAt.toDate().time
@@ -24,7 +24,6 @@ data class Post(
             else -> System.currentTimeMillis()
         }
 
-    // Constructor para crear nuevos posts (sin necesidad de especificar _createdAt)
     constructor(
         id: String = "",
         userId: String = "",
@@ -32,6 +31,7 @@ data class Post(
         userAvatarUrl: String? = null,
         title: String = "",
         content: String = "",
+        imageUrls: List<String> = emptyList(),
         likesCount: Int = 0,
         commentsCount: Int = 0,
         createdAt: Long = System.currentTimeMillis(),
@@ -43,6 +43,7 @@ data class Post(
         userAvatarUrl = userAvatarUrl,
         title = title,
         content = content,
+        imageUrls = imageUrls,
         likesCount = likesCount,
         commentsCount = commentsCount,
         _createdAt = createdAt,

@@ -1,13 +1,18 @@
 package com.tecsup.nexusmobile.presentation.ui.community
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,14 +22,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.tecsup.nexusmobile.data.repository.ImageUploadRepository
 import com.tecsup.nexusmobile.domain.model.Post
 import com.tecsup.nexusmobile.presentation.viewmodel.CommunityViewModel
 import com.tecsup.nexusmobile.presentation.viewmodel.CommunityUiState
 import com.tecsup.nexusmobile.presentation.viewmodel.CreatePostUiState
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -69,7 +78,6 @@ fun CommunityScreen(
                     }
                 },
                 actions = {
-                    // Botón de filtro
                     var showFilterMenu by remember { mutableStateOf(false) }
                     IconButton(onClick = { showFilterMenu = true }) {
                         Icon(
@@ -154,7 +162,6 @@ fun CommunityScreen(
             }
 
             is CommunityUiState.Success -> {
-                // Filtrar posts según el filtro seleccionado
                 val filteredPosts = when (selectedFilter) {
                     FilterType.ALL -> state.posts
                     FilterType.POPULAR -> state.posts.sortedByDescending { it.likesCount }
@@ -175,7 +182,6 @@ fun CommunityScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Header con filtro activo
                         if (selectedFilter != FilterType.ALL) {
                             item {
                                 FilterChip(
@@ -217,7 +223,6 @@ fun CommunityScreen(
                             )
                         }
 
-                        // Espaciado para el FAB
                         item {
                             Spacer(modifier = Modifier.height(80.dp))
                         }
@@ -242,8 +247,8 @@ fun CommunityScreen(
                 showCreatePostDialog = false
                 viewModel.resetCreatePostState()
             },
-            onCreatePost = { title, content, tags ->
-                viewModel.createPost(title, content)
+            onCreatePost = { title, content, imageUrls ->
+                viewModel.createPost(title, content, imageUrls)
             },
             isLoading = currentCreateState is CreatePostUiState.Loading,
             errorMessage = when (currentCreateState) {
@@ -345,6 +350,8 @@ fun ErrorCommunityView(
     }
 }
 
+// CONTINUACIÓN DE CommunityScreen.kt
+
 @Composable
 fun EnhancedPostCard(
     post: Post,
@@ -412,7 +419,8 @@ fun EnhancedPostCard(
                                 AsyncImage(
                                     model = post.userAvatarUrl,
                                     contentDescription = "Avatar",
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
                                 )
                             } else {
                                 Text(
@@ -477,6 +485,26 @@ fun EnhancedPostCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            // Imágenes del post
+            if (post.imageUrls.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                post.imageUrls.forEach { imageUrl ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 200.dp, max = 400.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        AsyncImage(
+                            model = imageUrl,
+                            contentDescription = "Imagen del post",
+                            modifier = Modifier.fillMaxWidth(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+            }
+
             Divider()
 
             // Acciones mejoradas
@@ -484,7 +512,7 @@ fun EnhancedPostCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                // Like button mejorado
+                // Like button
                 Button(
                     onClick = onLikeClick,
                     colors = ButtonDefaults.buttonColors(
@@ -511,7 +539,7 @@ fun EnhancedPostCard(
                     )
                 }
 
-                // Comment button mejorado
+                // Comment button
                 Button(
                     onClick = onCommentClick,
                     colors = ButtonDefaults.buttonColors(
@@ -606,7 +634,7 @@ fun EnhancedPostCard(
                         }
                     }
 
-                    // Input de comentario mejorado
+                    // Input de comentario
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -699,7 +727,8 @@ fun EnhancedCommentItem(comment: com.tecsup.nexusmobile.domain.model.Comment) {
                         AsyncImage(
                             model = comment.userAvatarUrl,
                             contentDescription = "Avatar",
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
                         )
                     } else {
                         Text(
@@ -745,6 +774,24 @@ fun EnhancedCommentItem(comment: com.tecsup.nexusmobile.domain.model.Comment) {
     }
 }
 
+private fun formatTimeAgo(timestamp: Long): String {
+    val now = System.currentTimeMillis()
+    val diff = now - timestamp
+
+    return when {
+        diff < 60_000 -> "Ahora"
+        diff < 3600_000 -> "${diff / 60_000}m"
+        diff < 86400_000 -> "${diff / 3600_000}h"
+        diff < 604800_000 -> "${diff / 86400_000}d"
+        else -> {
+            val sdf = SimpleDateFormat("dd MMM", Locale.getDefault())
+            sdf.format(Date(timestamp))
+        }
+    }
+}
+
+// CONTINUACIÓN FINAL DE CommunityScreen.kt
+
 @Composable
 fun EnhancedCreatePostDialog(
     onDismiss: () -> Unit,
@@ -756,6 +803,45 @@ fun EnhancedCreatePostDialog(
     var content by remember { mutableStateOf("") }
     val maxTitleLength = 100
     val maxContentLength = 1000
+
+    // Estados para imagen
+    val context = LocalContext.current
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var isUploadingImage by remember { mutableStateOf(false) }
+    var uploadedImageUrl by remember { mutableStateOf<String?>(null) }
+    var imageUploadError by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Launcher para seleccionar imagen
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedImageUri = it
+            imageUploadError = null
+            isUploadingImage = true
+
+            coroutineScope.launch {
+                try {
+                    val imageRepository = ImageUploadRepository()
+                    imageRepository.uploadPostImage(context, it)
+                        .onSuccess { url ->
+                            uploadedImageUrl = url
+                            isUploadingImage = false
+                        }
+                        .onFailure { error ->
+                            isUploadingImage = false
+                            imageUploadError = error.message
+                            selectedImageUri = null
+                        }
+                } catch (e: Exception) {
+                    isUploadingImage = false
+                    imageUploadError = e.message
+                    selectedImageUri = null
+                }
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -782,6 +868,7 @@ fun EnhancedCreatePostDialog(
         },
         text = {
             Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Título
@@ -794,7 +881,7 @@ fun EnhancedCreatePostDialog(
                     placeholder = { Text("¿De qué quieres hablar?") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    enabled = !isLoading,
+                    enabled = !isLoading && !isUploadingImage,
                     supportingText = {
                         Text(
                             "${title.length}/$maxTitleLength",
@@ -817,7 +904,7 @@ fun EnhancedCreatePostDialog(
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 5,
                     maxLines = 10,
-                    enabled = !isLoading,
+                    enabled = !isLoading && !isUploadingImage,
                     supportingText = {
                         Text(
                             "${content.length}/$maxContentLength",
@@ -825,6 +912,85 @@ fun EnhancedCreatePostDialog(
                         )
                     }
                 )
+
+                // Sección de imagen
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Imagen (opcional)",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            if (selectedImageUri != null && !isUploadingImage) {
+                                IconButton(
+                                    onClick = {
+                                        selectedImageUri = null
+                                        uploadedImageUrl = null
+                                        imageUploadError = null
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Close, "Eliminar imagen")
+                                }
+                            }
+                        }
+
+                        when {
+                            isUploadingImage -> {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Subiendo imagen...")
+                                }
+                            }
+                            selectedImageUri != null -> {
+                                AsyncImage(
+                                    model = selectedImageUri,
+                                    contentDescription = "Vista previa",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(120.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            else -> {
+                                Button(
+                                    onClick = { imagePickerLauncher.launch("image/*") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !isLoading
+                                ) {
+                                    Icon(Icons.Default.Image, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Seleccionar Imagen")
+                                }
+                            }
+                        }
+
+                        if (imageUploadError != null) {
+                            Text(
+                                text = "❌ Error: $imageUploadError",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
 
                 if (errorMessage != null) {
                     Card(
@@ -857,10 +1023,11 @@ fun EnhancedCreatePostDialog(
             Button(
                 onClick = {
                     if (title.isNotBlank() && content.isNotBlank()) {
-                        onCreatePost(title.trim(), content.trim(), emptyList())
+                        val imageUrls = uploadedImageUrl?.let { listOf(it) } ?: emptyList()
+                        onCreatePost(title.trim(), content.trim(), imageUrls)
                     }
                 },
-                enabled = title.isNotBlank() && content.isNotBlank() && !isLoading
+                enabled = title.isNotBlank() && content.isNotBlank() && !isLoading && !isUploadingImage
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -877,26 +1044,10 @@ fun EnhancedCreatePostDialog(
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !isLoading
+                enabled = !isLoading && !isUploadingImage
             ) {
                 Text("Cancelar")
             }
         }
     )
-}
-
-private fun formatTimeAgo(timestamp: Long): String {
-    val now = System.currentTimeMillis()
-    val diff = now - timestamp
-
-    return when {
-        diff < 60_000 -> "Ahora"
-        diff < 3600_000 -> "${diff / 60_000}m"
-        diff < 86400_000 -> "${diff / 3600_000}h"
-        diff < 604800_000 -> "${diff / 86400_000}d"
-        else -> {
-            val sdf = SimpleDateFormat("dd MMM", Locale.getDefault())
-            sdf.format(Date(timestamp))
-        }
-    }
 }
