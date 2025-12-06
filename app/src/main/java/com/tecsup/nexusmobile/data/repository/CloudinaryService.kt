@@ -3,8 +3,8 @@ package com.tecsup.nexusmobile.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.net.Uri
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,14 +25,13 @@ class CloudinaryService {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    // Credenciales de Cloudinary
-    private val cloudName = ""
-    private val apiKey = ""
-    private val apiSecret = ""
-    private val uploadPreset = "nexus_profiles" // Vamos a crear este preset en Cloudinary
+    // ✅ Tu configuración de Cloudinary
+    private val cloudName = "dnvsu8ugs"
+    private val uploadPreset = "nexus_profiles"
 
     /**
-     * Sube una imagen a Cloudinary con transformaciones automáticas
+     * Sube una imagen a Cloudinary con public_id único
+     * Estrategia: user_USERID_TIMESTAMP para permitir múltiples versiones
      */
     suspend fun uploadProfileImage(
         context: Context,
@@ -40,38 +39,67 @@ class CloudinaryService {
         userId: String
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
+            Log.d("Cloudinary", " Iniciando subida de imagen para usuario: $userId")
+
             // 1. Procesar imagen (crop cuadrado y resize)
             val processedFile = processImageForProfile(context, imageUri)
+            Log.d("Cloudinary", " Imagen procesada: ${processedFile.length() / 1024}KB")
 
-            // 2. Preparar multipart request
+            // 2. Generar public_id ÚNICO con timestamp
+            // Esto permite múltiples versiones y evita conflictos
+            val timestamp = System.currentTimeMillis()
+            val publicId = "user_${userId}_$timestamp"
+
+            // 3. Preparar multipart request
+            //  En modo Unsigned, SOLO se pueden enviar parámetros básicos
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart(
                     "file",
-                    "profile_$userId.jpg",
+                    "profile.jpg",
                     processedFile.asRequestBody("image/jpeg".toMediaType())
                 )
                 .addFormDataPart("upload_preset", uploadPreset)
-                .addFormDataPart("folder", "nexus/profiles") // Organizar en carpetas
-                .addFormDataPart("public_id", "user_$userId") // ID único por usuario
-                .addFormDataPart("overwrite", "true") // Sobrescribir si existe
-                .addFormDataPart("transformation", "c_fill,g_face,h_400,w_400") // Crop centrado en cara
+                .addFormDataPart("public_id", publicId)
+                // Tags para organizar y facilitar búsqueda/limpieza
+                .addFormDataPart("tags", "profile,user_$userId")
                 .build()
 
-            // 3. Hacer request a Cloudinary
+            // 4. Hacer request a Cloudinary
+            val url = "https://api.cloudinary.com/v1_1/$cloudName/image/upload"
+            Log.d("Cloudinary", " Enviando a: $url")
+            Log.d("Cloudinary", " Public ID: $publicId")
+
             val request = Request.Builder()
-                .url("https://api.cloudinary.com/v1_1/$cloudName/image/upload")
+                .url(url)
                 .post(requestBody)
                 .build()
 
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string()
 
+            Log.d("Cloudinary", "📡 Response code: ${response.code}")
+            Log.d("Cloudinary", "📡 Response body: $responseBody")
+
             if (!response.isSuccessful) {
                 processedFile.delete()
-                return@withContext Result.failure(
-                    Exception("Error al subir imagen: ${response.code} - ${responseBody ?: "Sin respuesta"}")
-                )
+
+                val errorMessage = when (response.code) {
+                    400 -> {
+                        val errorDetail = try {
+                            val json = JSONObject(responseBody ?: "{}")
+                            json.getJSONObject("error").getString("message")
+                        } catch (e: Exception) {
+                            responseBody ?: "Error desconocido"
+                        }
+                        " Error en la solicitud: $errorDetail"
+                    }
+                    401 -> " Upload preset '$uploadPreset' inválido o no es 'Unsigned'"
+                    404 -> " Cloud name incorrecto: '$cloudName'"
+                    else -> "Error ${response.code}: ${responseBody ?: "Sin respuesta"}"
+                }
+
+                return@withContext Result.failure(Exception(errorMessage))
             }
 
             if (responseBody == null) {
@@ -79,15 +107,29 @@ class CloudinaryService {
                 return@withContext Result.failure(Exception("Respuesta vacía del servidor"))
             }
 
-            // 4. Parsear respuesta
+            // 5. Parsear respuesta y obtener URL
             val jsonResponse = JSONObject(responseBody)
+
+            // Opción 1: Usar la URL directa que devuelve Cloudinary (con transformaciones del preset)
             val secureUrl = jsonResponse.getString("secure_url")
 
-            // 5. Limpiar archivo temporal
+            // Opción 2: Construir URL personalizada con transformaciones específicas
+            val returnedPublicId = jsonResponse.getString("public_id")
+            val customUrl = "https://res.cloudinary.com/$cloudName/image/upload/" +
+                    "c_fill,g_face,h_400,w_400,q_auto,f_auto/" +
+                    "$returnedPublicId.jpg"
+
+            Log.d("Cloudinary", "✅ Imagen subida exitosamente")
+            Log.d("Cloudinary", "🔗 URL Original: $secureUrl")
+            Log.d("Cloudinary", "🔗 URL Custom: $customUrl")
+
+            // 6. Limpiar archivo temporal
             processedFile.delete()
 
-            Result.success(secureUrl)
+            // Retornar URL personalizada con transformaciones
+            Result.success(customUrl)
         } catch (e: Exception) {
+            Log.e("Cloudinary", " Error al subir imagen: ${e.message}", e)
             Result.failure(Exception("Error al subir la imagen: ${e.message}"))
         }
     }
@@ -146,45 +188,32 @@ class CloudinaryService {
     }
 
     /**
-     * Elimina imagen anterior de Cloudinary (opcional)
+     * Limpia imágenes antiguas del usuario (opcional - requiere Admin API)
+     * Por ahora solo devuelve success para no bloquear
      */
     suspend fun deleteImage(imageUrl: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-
             if (!imageUrl.contains("cloudinary.com")) {
-                return@withContext Result.success(Unit) // No es de Cloudinary, ignorar
-            }
-
-            val publicId = extractPublicIdFromUrl(imageUrl)
-            if (publicId == null) {
                 return@withContext Result.success(Unit)
             }
 
-            // Cloudinary requiere firma para eliminación
-            // Por simplicidad, dejamos que se sobrescriba automáticamente
-            // (usamos overwrite=true en el upload)
+            Log.d("Cloudinary", "ℹ️ Las imágenes antiguas permanecen en Cloudinary")
+            Log.d("Cloudinary", "💡 Tip: Implementa limpieza periódica desde el dashboard")
 
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.success(Unit) // No fallar si no se puede eliminar
+            Result.success(Unit)
         }
     }
 
-    private fun extractPublicIdFromUrl(url: String): String? {
-        return try {
-            val parts = url.split("/upload/")
-            if (parts.size < 2) return null
-
-            val afterUpload = parts[1]
-            val pathParts = afterUpload.split("/")
-
-            // Remover versión (v1234567890) si existe
-            val relevantParts = pathParts.filter { !it.startsWith("v") || it.length < 10 }
-
-            // Unir y remover extensión
-            relevantParts.joinToString("/").substringBeforeLast(".")
-        } catch (e: Exception) {
-            null
-        }
+    /**
+     * Obtiene la URL más reciente del perfil del usuario
+     * Útil para mostrar siempre la última foto subida
+     */
+    fun getLatestProfileUrl(userId: String): String {
+        // Construir URL con transformación que obtiene la versión más reciente
+        return "https://res.cloudinary.com/$cloudName/image/upload/" +
+                "c_fill,g_face,h_400,w_400,q_auto,f_auto/" +
+                "nexus/profiles/user_$userId.jpg"
     }
 }

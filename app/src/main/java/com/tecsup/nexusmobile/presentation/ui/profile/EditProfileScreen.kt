@@ -41,6 +41,7 @@ fun EditProfileScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val imageRepository = remember { ImageUploadRepository() }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var username by remember { mutableStateOf("") }
     var fullName by remember { mutableStateOf("") }
@@ -51,6 +52,7 @@ fun EditProfileScreen(
     // Estado para imagen
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var uploadedImageUrl by remember { mutableStateOf<String?>(null) }
+    var uploadError by remember { mutableStateOf<String?>(null) }
 
     // Launcher para seleccionar imagen
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -58,18 +60,44 @@ fun EditProfileScreen(
     ) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
-            // Subir imagen automáticamente cuando se selecciona
+            uploadError = null
             isUploadingImage = true
+
             coroutineScope.launch {
-                imageRepository.uploadProfileImage(context, it)
-                    .onSuccess { url ->
-                        uploadedImageUrl = url
-                        isUploadingImage = false
-                    }
-                    .onFailure { error ->
-                        isUploadingImage = false
-                        // Mostrar error (podrías agregar un Snackbar aquí)
-                    }
+                try {
+                    imageRepository.uploadProfileImage(context, it)
+                        .onSuccess { url ->
+                            uploadedImageUrl = url
+                            isUploadingImage = false
+                            uploadError = null
+
+                            // Mostrar mensaje de éxito
+                            snackbarHostState.showSnackbar(
+                                message = "✅ Imagen subida. Ahora haz clic en 'Guardar Cambios'",
+                                duration = SnackbarDuration.Long
+                            )
+                        }
+                        .onFailure { error ->
+                            isUploadingImage = false
+                            uploadError = error.message
+                            selectedImageUri = null
+
+                            // Mostrar error
+                            snackbarHostState.showSnackbar(
+                                message = "❌ ${error.message}",
+                                duration = SnackbarDuration.Long
+                            )
+                        }
+                } catch (e: Exception) {
+                    isUploadingImage = false
+                    uploadError = e.message
+                    selectedImageUri = null
+
+                    snackbarHostState.showSnackbar(
+                        message = "❌ Error: ${e.message}",
+                        duration = SnackbarDuration.Long
+                    )
+                }
             }
         }
     }
@@ -95,8 +123,23 @@ fun EditProfileScreen(
             is UpdateProfileUiState.Success -> {
                 if (isUpdatingProfile) {
                     isUpdatingProfile = false
+                    snackbarHostState.showSnackbar(
+                        message = "✅ Perfil actualizado exitosamente",
+                        duration = SnackbarDuration.Short
+                    )
                     viewModel.loadProfile()
+                    kotlinx.coroutines.delay(500)
                     onBackClick()
+                }
+            }
+            is UpdateProfileUiState.Error -> {
+                if (isUpdatingProfile) {
+                    isUpdatingProfile = false
+                    val error = (updateState as UpdateProfileUiState.Error).message
+                    snackbarHostState.showSnackbar(
+                        message = "❌ $error",
+                        duration = SnackbarDuration.Long
+                    )
                 }
             }
             else -> {}
@@ -125,6 +168,21 @@ fun EditProfileScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+        },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (data.visuals.message.startsWith("✅"))
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.errorContainer,
+                    contentColor = if (data.visuals.message.startsWith("✅"))
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    else
+                        MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
         }
     ) { padding ->
         when (val state = uiState) {
@@ -161,7 +219,14 @@ fun EditProfileScreen(
                                 .clip(CircleShape)
                                 .border(
                                     width = 3.dp,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = if (isUploadingImage)
+                                        MaterialTheme.colorScheme.primary
+                                    else if (uploadError != null)
+                                        MaterialTheme.colorScheme.error
+                                    else if (selectedImageUri != null)
+                                        MaterialTheme.colorScheme.tertiary
+                                    else
+                                        MaterialTheme.colorScheme.primary,
                                     shape = CircleShape
                                 ),
                             color = MaterialTheme.colorScheme.primaryContainer
@@ -170,22 +235,37 @@ fun EditProfileScreen(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                if (isUploadingImage) {
-                                    CircularProgressIndicator()
-                                } else if (selectedImageUri != null || uploadedImageUrl != null) {
-                                    AsyncImage(
-                                        model = selectedImageUri ?: uploadedImageUrl,
-                                        contentDescription = "Avatar",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Person,
-                                        contentDescription = "Avatar",
-                                        modifier = Modifier.size(60.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                when {
+                                    isUploadingImage -> {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(40.dp)
+                                            )
+                                            Text(
+                                                text = "Subiendo...",
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                    }
+                                    selectedImageUri != null || uploadedImageUrl != null -> {
+                                        AsyncImage(
+                                            model = selectedImageUri ?: uploadedImageUrl,
+                                            contentDescription = "Avatar",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+                                    else -> {
+                                        Icon(
+                                            imageVector = Icons.Default.Person,
+                                            contentDescription = "Avatar",
+                                            modifier = Modifier.size(60.dp),
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -196,7 +276,9 @@ fun EditProfileScreen(
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
                                     .size(45.dp)
-                                    .clickable { imagePickerLauncher.launch("image/*") },
+                                    .clickable {
+                                        imagePickerLauncher.launch("image/*")
+                                    },
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.primary,
                                 shadowElevation = 4.dp
@@ -216,10 +298,25 @@ fun EditProfileScreen(
                         }
                     }
 
+                    // Texto de ayuda
                     Text(
-                        text = "Toca el ícono de cámara para cambiar tu foto",
+                        text = if (isUploadingImage) {
+                            "⏳ Subiendo imagen a Cloudinary..."
+                        } else if (uploadError != null) {
+                            " Error al subir imagen"
+                        } else if (selectedImageUri != null && uploadedImageUrl != null) {
+                            " Imagen lista. Haz clic en 'Guardar Cambios' abajo"
+                        } else {
+                            "Toca el ícono de cámara para cambiar tu foto"
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (uploadError != null)
+                            MaterialTheme.colorScheme.error
+                        else if (selectedImageUri != null && uploadedImageUrl != null)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
 
                     Divider()
@@ -249,7 +346,8 @@ fun EditProfileScreen(
                             label = { Text("Nombre de usuario") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            isError = username.isBlank()
+                            isError = username.isBlank(),
+                            enabled = !isUploadingImage && !isUpdatingProfile
                         )
 
                         // Nombre completo
@@ -259,13 +357,53 @@ fun EditProfileScreen(
                             label = { Text("Nombre completo") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            isError = fullName.isBlank()
+                            isError = fullName.isBlank(),
+                            enabled = !isUploadingImage && !isUpdatingProfile
                         )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // Info de imagen subida
+                    if (uploadError != null) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = " Error al subir imagen",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = uploadError!!,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                TextButton(
+                                    onClick = {
+                                        uploadError = null
+                                        selectedImageUri = null
+                                    }
+                                ) {
+                                    Text("Intentar de nuevo")
+                                }
+                            }
+                        }
+                    }
+
                     // Botón de guardar
+                    val hasChanges = username != state.user.username ||
+                            fullName != state.user.fullName ||
+                            uploadedImageUrl != state.user.avatarUrl
+
                     Button(
                         onClick = {
                             if (username.isNotBlank() && fullName.isNotBlank()) {
@@ -284,16 +422,20 @@ fun EditProfileScreen(
                         enabled = username.isNotBlank() &&
                                 fullName.isNotBlank() &&
                                 !isUploadingImage &&
-                                updateState !is UpdateProfileUiState.Loading &&
-                                (username != state.user.username ||
-                                        fullName != state.user.fullName ||
-                                        uploadedImageUrl != state.user.avatarUrl)
+                                !isUpdatingProfile &&
+                                hasChanges
                     ) {
-                        if (updateState is UpdateProfileUiState.Loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
+                        if (isUpdatingProfile) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Text("Guardando...")
+                            }
                         } else {
                             Text(
                                 "Guardar Cambios",
@@ -303,60 +445,14 @@ fun EditProfileScreen(
                         }
                     }
 
-                    // Info de imagen subida
-                    if (isUploadingImage) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Text(
-                                    text = "Subiendo imagen...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            }
-                        }
-                    }
-
-                    // Mostrar error si hay
-                    when (val update = updateState) {
-                        is UpdateProfileUiState.Error -> {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = "Error al actualizar perfil",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Text(
-                                        text = update.message,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                        }
-                        else -> {}
+                    // Mensaje de ayuda
+                    if (!hasChanges && !isUploadingImage) {
+                        Text(
+                            text = "No hay cambios para guardar",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                     }
                 }
             }
